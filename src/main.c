@@ -18,6 +18,8 @@ int main(int argc, char **argv) {
         force_quit("Could not initialize GLFW");
     }
 
+    glfwWindowHint(GLFW_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_VERSION_MINOR, 3);
     GLFWwindow *window = glfwCreateWindow(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT, "Graphs", NULL, NULL);
     if (!window) {
         force_quit("Could not initialize GLFW");
@@ -32,7 +34,7 @@ int main(int argc, char **argv) {
 
     printf("%s\n", glGetString(GL_VERSION));
 
-    if (!gl3wIsSupported(3, 0)) {
+    if (!gl3wIsSupported(3, 3)) {
         force_quit("OpenGL 3.2 not supported\n");
     }
 
