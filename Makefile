@@ -1,7 +1,7 @@
 all: compile lint run
 
 lint:
-	cppcheck . --enable=warning,performance,portability
+	cppcheck . --enable=warning,performance,portability,information
 
 compile:
 	mkdir -p build
