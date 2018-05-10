@@ -63,12 +63,32 @@ int main(int argc, char **argv) {
     char *vertex_file_name = "src/vertexshader.glsl";
     char *frag_file_name = "src/fragshader.glsl";
 
-    char *vertex_shader_content = load_text_file_content(vertex_file_name);
-    char *frag_shader_content = load_text_file_content(frag_file_name);
+    const char *vertex_shader_content = load_text_file_content(vertex_file_name);
+    const char *frag_shader_content = load_text_file_content(frag_file_name);
+
+    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
+
+    glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
+    glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
+
+    // TODO: check for errors
+    glCompileShader(vertex_shader);
+    glCompileShader(frag_shader);
+
+    GLuint shader_program = glCreateProgram();
+
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, frag_shader);
+
+    // TODO: check for errors
+    glLinkProgram(shader_program);
 
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glUseProgram(shader_program);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
