@@ -11,4 +11,5 @@ clean:
 	rm -rf build
 
 run:
+	@echo ""
 	optirun ./build/main.exe

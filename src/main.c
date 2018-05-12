@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "constants.h"
 
@@ -58,7 +59,11 @@ int main(int argc, char **argv) {
         force_quit("OpenGL 3.2 not supported\n");
     }
 
-    // other initializations
+    // set draw target to back buffer
+    glDrawBuffer(GL_BACK);
+
+
+    // shader initialization
 
     char *vertex_file_name = "src/vertexshader.glsl";
     char *frag_file_name = "src/fragshader.glsl";
@@ -72,23 +77,79 @@ int main(int argc, char **argv) {
     glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
     glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
 
-    // TODO: check for errors
+    GLint shader_compiled;
     glCompileShader(vertex_shader);
+    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_compiled);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(vertex_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Vertex shader failed to compile\n%s\n", message);
+        force_quit(output);
+    }
     glCompileShader(frag_shader);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(frag_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Fragment shader failed to compile\n%s\n", message);
+        force_quit(output);
+    }
 
     GLuint shader_program = glCreateProgram();
 
     glAttachShader(shader_program, vertex_shader);
     glAttachShader(shader_program, frag_shader);
 
-    // TODO: check for errors
     glLinkProgram(shader_program);
+    GLint program_linked;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &program_linked);
+    if (program_linked != GL_TRUE) {
+        GLchar message[1000];
+        glGetProgramInfoLog(program_linked, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Program failed to link\n%s\n", message);
+        force_quit(output);
+    }
+
+
+    // buffers initialization
+
+    GLuint VBO, EBO, VAO;
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+    glGenVertexArrays(1, &VAO);
+
+    
+    // initialize program data
+
+    GLfloat circle_vertices[NUM_SECTIONS_CIRCLE * 3] = {0};
+    for (int i = 0; i < NUM_SECTIONS_CIRCLE; i++) {
+        float angle = i * (2 * M_PI / NUM_SECTIONS_CIRCLE);
+        circle_vertices[i * 3] = cos(angle);
+        circle_vertices[i * 3 + 1] = sin(angle);
+        circle_vertices[i * 3 + 2] = 0.0f;
+    }
+
+    // TODO: check for error
+    // TODO: really understand all of this better (this VAO thing)
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *) 0);
+    glEnableVertexAttribArray(0); // TODO: figure out if this should really be the layout location number
+    //glDisableVertexAttribArray(0); // TODO: figure out if this can be disabled
+    glBindVertexArray(0);
 
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
+
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glBindVertexArray(0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
