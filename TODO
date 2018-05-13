@@ -1,8 +1,5 @@
-- Create a circle
-- Zoom in and out with mouse wheel
-- Create multiple circles
 - Make circles draggable
 - Make it possible for the user to add arrows
 - Create user interface (with drag and drop)
-
+- Hardware cursor
 - Add online mode

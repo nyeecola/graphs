@@ -4,14 +4,24 @@
 #include <stdlib.h>
 #include <math.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include "constants.h"
 
+#define TRUE 1
+#define FALSE 0
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 
 GLfloat global_zoom = 0.1f;
 double global_delta_time;
+bool global_clicked = FALSE;
+double global_last_mouse_x = -1;
+double global_last_mouse_y = -1;
+double global_last_translation_x = 0;
+double global_last_translation_y = 0;
+double global_cur_translation_x = 0;
+double global_cur_translation_y = 0;
 
 // kills game with an error message
 void force_quit(const char *str) {
@@ -48,7 +58,17 @@ void cursor_pos_callback(GLFWwindow *window, double x, double y) {
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
-    // no-op
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+        global_clicked = true;
+        glfwGetCursorPos(window, &global_last_mouse_x, &global_last_mouse_y);
+    }
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE && global_clicked) {
+        global_clicked = false;
+        global_last_translation_x += global_cur_translation_x;
+        global_last_translation_y += global_cur_translation_y;
+        global_cur_translation_x = 0;
+        global_cur_translation_y = 0;
+    }
 }
 
 // TODO: zoom on mouse cursor
@@ -91,6 +111,9 @@ int main(int argc, char **argv) {
 
     // set draw target to back buffer
     glDrawBuffer(GL_BACK);
+
+    // vsync
+    glfwSwapInterval(1);
 
 
     // shader initialization
@@ -177,29 +200,46 @@ int main(int argc, char **argv) {
     double last_time = glfwGetTime();
     global_delta_time = 0;
     while (!glfwWindowShouldClose(window)) {
+        glfwWaitEvents();
         double current_time = glfwGetTime();
         global_delta_time = current_time - last_time;
         last_time = current_time;
+
+        assert(global_zoom > 0);
+
+        double current_mouse_x, current_mouse_y;
+        glfwGetCursorPos(window, &current_mouse_x, &current_mouse_y);
+        if (global_clicked) {
+            global_cur_translation_x = (current_mouse_x - global_last_mouse_x);
+            global_cur_translation_x = (global_cur_translation_x / (DEFAULT_SCREEN_WIDTH/2));
+            global_cur_translation_x /= global_zoom;
+
+            global_cur_translation_y = (current_mouse_y - global_last_mouse_y);
+            global_cur_translation_y = (global_cur_translation_y / (DEFAULT_SCREEN_HEIGHT/2)) / ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            global_cur_translation_y *= -1;
+            global_cur_translation_y /= global_zoom;
+        }
 
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
-        assert(global_zoom > 0);
         glUniform1f(scale_uniform, global_zoom);
         glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
 
         glBindVertexArray(VAO);
-        glUniform3f(translation_uniform, 0.0f, 0.0f, 0.0f);
+        double frame_translation_x = global_last_translation_x + global_cur_translation_x;
+        double frame_translation_y = global_last_translation_y + global_cur_translation_y;
+        glUniform3f(translation_uniform, frame_translation_x + 0.0f, frame_translation_y + 0.0f, 0.0f);
         glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
-        glUniform3f(translation_uniform, 2.0f, 0.22f, 0.0f);
+        glUniform3f(translation_uniform, frame_translation_x + 2.0f, frame_translation_y + 0.22f, 0.0f);
         glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
-        glUniform3f(translation_uniform, -1.4f, 2.22f, 0.0f);
+        glUniform3f(translation_uniform, frame_translation_x + -1.4f, frame_translation_y + 2.22f, 0.0f);
         glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
-        glfwPollEvents();
+        //glfwPollEvents();
     }
 
     glfwTerminate();
