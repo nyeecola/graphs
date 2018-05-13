@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <assert.h>
 
 #include "constants.h"
 
@@ -136,18 +137,39 @@ int main(int argc, char **argv) {
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void *) 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
     glEnableVertexAttribArray(0); // TODO: figure out if this should really be the layout location number
     //glDisableVertexAttribArray(0); // TODO: figure out if this can be disabled
     glBindVertexArray(0);
 
+    GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
+    GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
+    GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
+
+    GLfloat zoom = 1.0f;
+    double last_time = glfwGetTime();
+    double delta_time = 0;
     while (!glfwWindowShouldClose(window)) {
+        double current_time = glfwGetTime();
+        delta_time = current_time - last_time;
+        last_time = current_time;
+
+        zoom -= 0.06f * delta_time;
+
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
+        assert(zoom > 0);
+        glUniform1f(scale_uniform, zoom);
+        glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
 
         glBindVertexArray(VAO);
+        glUniform3f(translation_uniform, 0.0f, 0.0f, 0.0f);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glUniform3f(translation_uniform, 2.0f, 0.22f, 0.0f);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glUniform3f(translation_uniform, -1.4f, 2.22f, 0.0f);
         glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
         glBindVertexArray(0);
 
