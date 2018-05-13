@@ -7,6 +7,12 @@
 
 #include "constants.h"
 
+#define max(a, b) (a > b ? a : b)
+#define min(a, b) (a < b ? a : b)
+
+GLfloat global_zoom = 0.1f;
+double global_delta_time;
+
 // kills game with an error message
 void force_quit(const char *str) {
     fprintf(stderr, "Fatal error: %s\n", str);
@@ -33,6 +39,25 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    // no-op
+}
+
+void cursor_pos_callback(GLFWwindow *window, double x, double y) {
+    // no-op
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
+    // no-op
+}
+
+// TODO: zoom on mouse cursor
+void scroll_callback(GLFWwindow *window, double x, double y) {
+    //global_zoom += 0.1 * y * global_delta_time;
+    global_zoom += 0.02 * y;
+    global_zoom = max(global_zoom, 0.04);
+}
+
 int main(int argc, char **argv) {
     // glfw, gl3w and context initialization
 
@@ -49,6 +74,10 @@ int main(int argc, char **argv) {
     }
 
     glfwMakeContextCurrent(window);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     if (gl3wInit()) {
         force_quit("Failed to initialize gl3w\n");
@@ -138,39 +167,35 @@ int main(int argc, char **argv) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-    glEnableVertexAttribArray(0); // TODO: figure out if this should really be the layout location number
-    //glDisableVertexAttribArray(0); // TODO: figure out if this can be disabled
+    glEnableVertexAttribArray(0);
     glBindVertexArray(0);
 
     GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
     GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
 
-    GLfloat zoom = 1.0f;
     double last_time = glfwGetTime();
-    double delta_time = 0;
+    global_delta_time = 0;
     while (!glfwWindowShouldClose(window)) {
         double current_time = glfwGetTime();
-        delta_time = current_time - last_time;
+        global_delta_time = current_time - last_time;
         last_time = current_time;
-
-        zoom -= 0.06f * delta_time;
 
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
-        assert(zoom > 0);
-        glUniform1f(scale_uniform, zoom);
+        assert(global_zoom > 0);
+        glUniform1f(scale_uniform, global_zoom);
         glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
 
         glBindVertexArray(VAO);
         glUniform3f(translation_uniform, 0.0f, 0.0f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
         glUniform3f(translation_uniform, 2.0f, 0.22f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
         glUniform3f(translation_uniform, -1.4f, 2.22f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE); // TODO: really understand indices and how this knows the size of an index
+        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
