@@ -43,6 +43,11 @@ float magnitude(v2f v1) {
 }
 
 typedef struct {
+    v2f pos;
+    bool selected;
+} vertex_t;
+
+typedef struct {
     GLfloat zoom;
     double delta_time;
     bool dragging_map;
@@ -50,8 +55,7 @@ typedef struct {
     v2f last_mouse;
     v2f last_translation;
     v2f cur_translation;
-    v2f *circles;
-    bool *circles_selected;
+    vertex_t *circles;
     int num_circles;
 } global_state_t;
 
@@ -118,13 +122,13 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
         temp.y += global_state->last_translation.y;
         for (int i = 0; i < global_state->num_circles; i++) {
-            double x = global_state->circles[i].x - temp.x;
-            double y = -global_state->circles[i].y - temp.y;
+            double x = global_state->circles[i].pos.x - temp.x;
+            double y = -global_state->circles[i].pos.y - temp.y;
             double r = 1.0f;
             if (x * x + y * y <= r * r) {
-                global_state->circles_selected[i] = true;
+                global_state->circles[i].selected = true;
             } else {
-                global_state->circles_selected[i] = false;
+                global_state->circles[i].selected = false;
             }
         }
     }
@@ -320,18 +324,17 @@ int main(int argc, char **argv) {
     global_state.cur_translation.x = 0;
     global_state.cur_translation.y = 0;
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
-    global_state.circles_selected = malloc(MAX_VERTICES * sizeof(*global_state.circles_selected));
     global_state.num_circles = 0;
     // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
-    global_state.circles[global_state.num_circles].x = 0.0f;
-    global_state.circles[global_state.num_circles].y = 0.0f;
+    global_state.circles[global_state.num_circles].pos.x = 0.0f;
+    global_state.circles[global_state.num_circles].pos.y = 0.0f;
     global_state.num_circles++;
-    global_state.circles[global_state.num_circles].x = 2.2f;
-    global_state.circles[global_state.num_circles].y = 0.7f;
+    global_state.circles[global_state.num_circles].pos.x = 2.2f;
+    global_state.circles[global_state.num_circles].pos.y = 0.7f;
     global_state.num_circles++;
-    global_state.circles[global_state.num_circles].x = -1.4f;
-    global_state.circles[global_state.num_circles].y = 2.1f;
+    global_state.circles[global_state.num_circles].pos.x = -1.4f;
+    global_state.circles[global_state.num_circles].pos.y = 2.1f;
     global_state.num_circles++;
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
@@ -370,9 +373,9 @@ int main(int argc, char **argv) {
             temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
             temp.y += global_state.last_translation.y;
             for (int i = 0; i < global_state.num_circles; i++) {
-                if (global_state.circles_selected[i]) {
-                    global_state.circles[i].x = temp.x;
-                    global_state.circles[i].y = -temp.y;
+                if (global_state.circles[i].selected) {
+                    global_state.circles[i].pos.x = temp.x;
+                    global_state.circles[i].pos.y = -temp.y;
                 }
             }
         }
@@ -389,10 +392,10 @@ int main(int argc, char **argv) {
         frame_translation.x = global_state.last_translation.x + global_state.cur_translation.x;
         frame_translation.y = global_state.last_translation.y + global_state.cur_translation.y;
         for (int i = 0; i < global_state.num_circles; i++) {
-            double x = frame_translation.x + global_state.circles[i].x;
-            double y = frame_translation.y + global_state.circles[i].y;
+            double x = frame_translation.x + global_state.circles[i].pos.x;
+            double y = frame_translation.y + global_state.circles[i].pos.y;
             glUniform3f(translation_uniform, x, y, 0.0f);
-            if (global_state.circles_selected[i]) {
+            if (global_state.circles[i].selected) {
                 glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
             } else {
                 glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
