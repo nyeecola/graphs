@@ -16,7 +16,8 @@
 typedef struct {
     GLfloat zoom;
     double delta_time;
-    bool clicked;
+    bool dragging_map;
+    bool dragging_vertex;
     double last_mouse_x;
     double last_mouse_y;
     double last_translation_x;
@@ -82,6 +83,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 
     // handle vertice selection and dragging
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+        global_state->dragging_vertex = TRUE;
+
         double temp_x, temp_y;
         glfwGetCursorPos(window, &temp_x, &temp_y);
         temp_x = (temp_x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
@@ -100,14 +103,17 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             }
         }
     }
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
+        global_state->dragging_vertex = FALSE;
+    }
 
     // handle map dragging
     if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS) {
-        global_state->clicked = true;
+        global_state->dragging_map = true;
         glfwGetCursorPos(window, &global_state->last_mouse_x, &global_state->last_mouse_y);
     }
-    if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE && global_state->clicked) {
-        global_state->clicked = false;
+    if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE && global_state->dragging_map) {
+        global_state->dragging_map = false;
         global_state->last_translation_x += global_state->cur_translation_x;
         global_state->last_translation_y += global_state->cur_translation_y;
         global_state->cur_translation_x = 0;
@@ -252,7 +258,8 @@ int main(int argc, char **argv) {
     global_state_t global_state;
     global_state.zoom = 0.1f;
     global_state.delta_time = 0;
-    global_state.clicked = FALSE;
+    global_state.dragging_map = FALSE;
+    global_state.dragging_vertex = FALSE;
     global_state.last_mouse_x = -1;
     global_state.last_mouse_y = -1;
     global_state.last_translation_x = 0;
@@ -288,7 +295,7 @@ int main(int argc, char **argv) {
 
         double current_mouse_x, current_mouse_y;
         glfwGetCursorPos(window, &current_mouse_x, &current_mouse_y);
-        if (global_state.clicked) {
+        if (global_state.dragging_map) {
             global_state.cur_translation_x = (current_mouse_x - global_state.last_mouse_x);
             global_state.cur_translation_x = (global_state.cur_translation_x / (DEFAULT_SCREEN_WIDTH/2));
             global_state.cur_translation_x /= global_state.zoom;
@@ -298,6 +305,23 @@ int main(int argc, char **argv) {
             global_state.cur_translation_y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
             global_state.cur_translation_y *= -1;
             global_state.cur_translation_y /= global_state.zoom;
+        }
+        // TODO; make sure this works if currently also dragging map
+        // TODO: make it possible to drag multiple vertices simultaneously
+        if (global_state.dragging_vertex) {
+            double temp_x = current_mouse_x;
+            double temp_y = current_mouse_y;
+            temp_x = (temp_x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state.zoom;
+            temp_x -= global_state.last_translation_x;
+            temp_y = (temp_y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state.zoom;
+            temp_y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            temp_y += global_state.last_translation_y;
+            for (int i = 0; i < global_state.num_circles; i++) {
+                if (global_state.circles_selected[i]) {
+                    global_state.circles_x[i] = temp_x;
+                    global_state.circles_y[i] = -temp_y;
+                }
+            }
         }
 
         glClearColor(0.2, 0.6, 0.95, 1);
@@ -315,7 +339,7 @@ int main(int argc, char **argv) {
             double y = frame_translation_y + global_state.circles_y[i];
             glUniform3f(translation_uniform, x, y, 0.0f);
             if (global_state.circles_selected[i]) {
-                glUniform3f(color_uniform, 1.0f, 0.6f, 0.3f);
+                glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
             } else {
                 glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
             }
