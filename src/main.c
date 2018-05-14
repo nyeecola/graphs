@@ -132,6 +132,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
         temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
         temp.y += global_state->last_translation.y;
+
+        global_state->modifying_vertex = -1; // unselect vertices
         for (int i = 0; i < global_state->num_circles; i++) {
             double x = global_state->circles[i].pos.x - temp.x;
             double y = -global_state->circles[i].pos.y - temp.y;
@@ -248,6 +250,8 @@ int main(int argc, char **argv) {
     glDepthFunc(GL_LEQUAL);
     //glDepthFunc(GL_LESS);
 
+    // line width
+    glLineWidth(3);
 
 #if 1
     // debug
@@ -318,6 +322,9 @@ int main(int argc, char **argv) {
     glGenBuffers(1, &EBO);
     glGenVertexArrays(1, &VAO);
 
+    GLuint VBO2, VAO2;
+    glGenBuffers(1, &VBO2);
+    glGenVertexArrays(1, &VAO2);
     
     // initialize program data
 
@@ -361,9 +368,11 @@ int main(int argc, char **argv) {
     global_state.num_circles = 0;
     // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, 0.0, 0.0);
+    create_vertex(&global_state, -0.5, -0.4);
     create_vertex(&global_state, 2.2, 0.7);
     create_vertex(&global_state, -1.4, 2.1);
+    global_state.circles[0].children[global_state.circles[0].num_children++] = 1;
+    global_state.circles[0].children[global_state.circles[0].num_children++] = 2;
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
@@ -415,10 +424,13 @@ int main(int argc, char **argv) {
         glUniform1f(scale_uniform, global_state.zoom);
         glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
 
-        glBindVertexArray(VAO);
+        // screen position
         v2f frame_translation;
         frame_translation.x = global_state.last_translation.x + global_state.cur_translation.x;
         frame_translation.y = global_state.last_translation.y + global_state.cur_translation.y;
+
+        // draw vertices
+        glBindVertexArray(VAO);
         for (int i = 0; i < global_state.num_circles; i++) {
             double x = frame_translation.x + global_state.circles[i].pos.x;
             double y = frame_translation.y + global_state.circles[i].pos.y;
@@ -429,6 +441,30 @@ int main(int argc, char **argv) {
                 glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
             }
             glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+        }
+        glBindVertexArray(0);
+
+        // draw arrows
+        // TODO: add direction
+        glBindVertexArray(VAO2);
+        glUniform3f(translation_uniform, 0, 0, 0.0f);
+        for (int i = 0; i < global_state.num_circles; i++) {
+            for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                double x1 = frame_translation.x + global_state.circles[i].pos.x;
+                double y1 = frame_translation.y + global_state.circles[i].pos.y;
+                double x2 = frame_translation.x + global_state.circles[global_state.circles[i].children[j]].pos.x; 
+                double y2 = frame_translation.y + global_state.circles[global_state.circles[i].children[j]].pos.y; 
+                GLfloat line_vertices[3 * 2] = {
+                    x1, y1, 0.2,
+                    x2, y2, 0.2,
+                };
+                glBindBuffer(GL_ARRAY_BUFFER, VBO2);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+                glEnableVertexAttribArray(0);
+                glUniform3f(color_uniform, 1.0f, 0.0f, 0.0f);
+                glDrawArrays(GL_LINES, 0, 2);
+            }
         }
         glBindVertexArray(0);
 
