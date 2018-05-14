@@ -13,15 +13,21 @@
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 
-GLfloat global_zoom = 0.1f;
-double global_delta_time;
-bool global_clicked = FALSE;
-double global_last_mouse_x = -1;
-double global_last_mouse_y = -1;
-double global_last_translation_x = 0;
-double global_last_translation_y = 0;
-double global_cur_translation_x = 0;
-double global_cur_translation_y = 0;
+typedef struct {
+    GLfloat zoom;
+    double delta_time;
+    bool clicked;
+    double last_mouse_x;
+    double last_mouse_y;
+    double last_translation_x;
+    double last_translation_y;
+    double cur_translation_x;
+    double cur_translation_y;
+    double *circles_x;
+    double *circles_y;
+    int num_circles;
+} global_state_t;
+
 
 // kills game with an error message
 void force_quit(const char *str) {
@@ -50,32 +56,60 @@ char *load_text_file_content(char *filename) {
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    global_state_t *global_state = glfwGetWindowUserPointer(window);
+    if (global_state == NULL) { // program not fully initilized yet
+        return;
+    }
+
     // no-op
 }
 
 void cursor_pos_callback(GLFWwindow *window, double x, double y) {
+    global_state_t *global_state = glfwGetWindowUserPointer(window);
+    if (global_state == NULL) { // program not fully initilized yet
+        return;
+    }
+
     // no-op
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
-        global_clicked = true;
-        glfwGetCursorPos(window, &global_last_mouse_x, &global_last_mouse_y);
+    global_state_t *global_state = glfwGetWindowUserPointer(window);
+    if (global_state == NULL) { // program not fully initilized yet
+        return;
     }
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE && global_clicked) {
-        global_clicked = false;
-        global_last_translation_x += global_cur_translation_x;
-        global_last_translation_y += global_cur_translation_y;
-        global_cur_translation_x = 0;
-        global_cur_translation_y = 0;
+
+    // handle vertice selection and dragging
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+        double temp_x, temp_y;
+        glfwGetCursorPos(window, &temp_x, &temp_y);
+        // TODO
+    }
+
+    // handle map dragging
+    if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS) {
+        global_state->clicked = true;
+        glfwGetCursorPos(window, &global_state->last_mouse_x, &global_state->last_mouse_y);
+    }
+    if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE && global_state->clicked) {
+        global_state->clicked = false;
+        global_state->last_translation_x += global_state->cur_translation_x;
+        global_state->last_translation_y += global_state->cur_translation_y;
+        global_state->cur_translation_x = 0;
+        global_state->cur_translation_y = 0;
     }
 }
 
 // TODO: zoom on mouse cursor
 void scroll_callback(GLFWwindow *window, double x, double y) {
-    //global_zoom += 0.1 * y * global_delta_time;
-    global_zoom += 0.02 * y;
-    global_zoom = max(global_zoom, 0.04);
+    global_state_t *global_state = glfwGetWindowUserPointer(window);
+    if (global_state == NULL) { // program not fully initilized yet
+        return;
+    }
+
+    //global_state->zoom += 0.1 * y * global_state->delta_time;
+    global_state->zoom += 0.02 * y;
+    global_state->zoom = max(global_state->zoom, 0.04);
 }
 
 int main(int argc, char **argv) {
@@ -197,45 +231,74 @@ int main(int argc, char **argv) {
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
     GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
 
+
+    // initialize global state
+    global_state_t global_state;
+    global_state.zoom = 0.1f;
+    global_state.delta_time = 0;
+    global_state.clicked = FALSE;
+    global_state.last_mouse_x = -1;
+    global_state.last_mouse_y = -1;
+    global_state.last_translation_x = 0;
+    global_state.last_translation_y = 0;
+    global_state.cur_translation_x = 0;
+    global_state.cur_translation_y = 0;
+    global_state.circles_x = malloc(MAX_VERTICES * sizeof(*global_state.circles_x));
+    global_state.circles_y = malloc(MAX_VERTICES * sizeof(*global_state.circles_y));
+    global_state.num_circles = 0;
+
+    // TODO: actually implement a way to add/remove circles
+    // TEMP: add some circles just for testing purposes
+    global_state.circles_x[global_state.num_circles] = 0.0f;
+    global_state.circles_y[global_state.num_circles] = 0.0f;
+    global_state.num_circles++;
+    global_state.circles_x[global_state.num_circles] = 2.2f;
+    global_state.circles_y[global_state.num_circles] = 0.7f;
+    global_state.num_circles++;
+    global_state.circles_x[global_state.num_circles] = -1.4f;
+    global_state.circles_y[global_state.num_circles] = 2.1f;
+    global_state.num_circles++;
+
+    glfwSetWindowUserPointer(window, (void *) &global_state);
+
     double last_time = glfwGetTime();
-    global_delta_time = 0;
     while (!glfwWindowShouldClose(window)) {
         glfwWaitEvents();
         double current_time = glfwGetTime();
-        global_delta_time = current_time - last_time;
+        global_state.delta_time = current_time - last_time;
         last_time = current_time;
 
-        assert(global_zoom > 0);
+        assert(global_state.zoom > 0);
 
         double current_mouse_x, current_mouse_y;
         glfwGetCursorPos(window, &current_mouse_x, &current_mouse_y);
-        if (global_clicked) {
-            global_cur_translation_x = (current_mouse_x - global_last_mouse_x);
-            global_cur_translation_x = (global_cur_translation_x / (DEFAULT_SCREEN_WIDTH/2));
-            global_cur_translation_x /= global_zoom;
+        if (global_state.clicked) {
+            global_state.cur_translation_x = (current_mouse_x - global_state.last_mouse_x);
+            global_state.cur_translation_x = (global_state.cur_translation_x / (DEFAULT_SCREEN_WIDTH/2));
+            global_state.cur_translation_x /= global_state.zoom;
 
-            global_cur_translation_y = (current_mouse_y - global_last_mouse_y);
-            global_cur_translation_y = (global_cur_translation_y / (DEFAULT_SCREEN_HEIGHT/2)) / ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-            global_cur_translation_y *= -1;
-            global_cur_translation_y /= global_zoom;
+            global_state.cur_translation_y = (current_mouse_y - global_state.last_mouse_y);
+            global_state.cur_translation_y = (global_state.cur_translation_y / (DEFAULT_SCREEN_HEIGHT/2)) / ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            global_state.cur_translation_y *= -1;
+            global_state.cur_translation_y /= global_state.zoom;
         }
 
         glClearColor(0.2, 0.6, 0.95, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
-        glUniform1f(scale_uniform, global_zoom);
+        glUniform1f(scale_uniform, global_state.zoom);
         glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
 
         glBindVertexArray(VAO);
-        double frame_translation_x = global_last_translation_x + global_cur_translation_x;
-        double frame_translation_y = global_last_translation_y + global_cur_translation_y;
-        glUniform3f(translation_uniform, frame_translation_x + 0.0f, frame_translation_y + 0.0f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
-        glUniform3f(translation_uniform, frame_translation_x + 2.0f, frame_translation_y + 0.22f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
-        glUniform3f(translation_uniform, frame_translation_x + -1.4f, frame_translation_y + 2.22f, 0.0f);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+        double frame_translation_x = global_state.last_translation_x + global_state.cur_translation_x;
+        double frame_translation_y = global_state.last_translation_y + global_state.cur_translation_y;
+        for (int i = 0; i < global_state.num_circles; i++) {
+            double x = frame_translation_x + global_state.circles_x[i];
+            double y = frame_translation_y + global_state.circles_y[i];
+            glUniform3f(translation_uniform, x, y, 0.0f);
+            glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+        }
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);

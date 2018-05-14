@@ -2,4 +2,9 @@
 - Make it possible for the user to add arrows
 - Create user interface (with drag and drop)
 - Hardware cursor
+- Zoom on mouse cursor
 - Add online mode
+
+Low priority:
+- Render using instancing
+- Remove MAX_VERTICES limit
