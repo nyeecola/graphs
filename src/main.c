@@ -418,7 +418,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        glClearColor(0.2, 0.6, 0.95, 1);
+        glClearColor(0.95, 0.6, 0.3, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
@@ -449,6 +449,9 @@ int main(int argc, char **argv) {
         // TODO: add direction
         glBindVertexArray(VAO2);
         glUniform3f(translation_uniform, 0, 0, 0.0f);
+        glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
+
+        // vertices children
         for (int i = 0; i < global_state.num_circles; i++) {
             for (int j = 0; j < global_state.circles[i].num_children; j++) {
                 double x1 = frame_translation.x + global_state.circles[i].pos.x;
@@ -463,10 +466,30 @@ int main(int argc, char **argv) {
                 glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
                 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
                 glEnableVertexAttribArray(0);
-                glUniform3f(color_uniform, 1.0f, 0.0f, 0.0f);
                 glDrawArrays(GL_LINES, 0, 2);
             }
         }
+
+        // arrow being currently created
+        if (global_state.modifying_vertex != -1) {
+            double x1 = frame_translation.x + global_state.circles[global_state.modifying_vertex].pos.x;
+            double y1 = frame_translation.y + global_state.circles[global_state.modifying_vertex].pos.y;
+            double x2 = (current_mouse.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state.zoom;
+            x2 -= global_state.last_translation.x;
+            double y2 = (current_mouse.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state.zoom;
+            y2 /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            y2 += global_state.last_translation.y;
+            GLfloat line_vertices[3 * 2] = {
+                x1, y1, -0.2,
+                x2, -y2, -0.2,
+            };
+            glBindBuffer(GL_ARRAY_BUFFER, VBO2);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_LINES, 0, 2);
+        }
+
         glBindVertexArray(0);
 
         glfwSwapBuffers(window);
