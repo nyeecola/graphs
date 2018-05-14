@@ -317,11 +317,12 @@ int main(int argc, char **argv) {
 
     // buffers initialization
 
-    GLuint VBO, EBO, VAO;
+    // vertices buffers
+    GLuint VBO, VAO;
     glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
     glGenVertexArrays(1, &VAO);
 
+    // line buffers
     GLuint VBO2, VAO2;
     glGenBuffers(1, &VBO2);
     glGenVertexArrays(1, &VAO2);
