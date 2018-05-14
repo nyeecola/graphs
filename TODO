@@ -9,6 +9,7 @@ Normal priority:
 - Zoom on mouse cursor
 - Hardware cursor
 - Create user interface (with drag and drop)
+- Figure out why MSAA is not working (test on windows)
 
 Low priority:
 - Render using instancing
