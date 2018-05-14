@@ -6,6 +6,7 @@ Normal priority:
 - Clean up coordinate system
 - Make it possible for the user to add arrows
 - Make it so that multiple vertices can be dragged at the same time 
+- Make it so that multiple vertices can be modified at the same time 
 - Zoom on mouse cursor
 - Hardware cursor
 - Create user interface (with drag and drop)

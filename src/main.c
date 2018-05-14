@@ -45,6 +45,8 @@ float magnitude(v2f v1) {
 typedef struct {
     v2f pos;
     bool selected;
+    int *children;
+    int num_children;
 } vertex_t;
 
 typedef struct {
@@ -52,6 +54,7 @@ typedef struct {
     double delta_time;
     bool dragging_map;
     bool dragging_vertex;
+    int modifying_vertex; // NOTE: -1 means no vertex is currently being modified
     v2f last_mouse;
     v2f last_translation;
     v2f cur_translation;
@@ -59,6 +62,15 @@ typedef struct {
     int num_circles;
 } global_state_t;
 
+void create_vertex(global_state_t *global_state, double x, double y) {
+    vertex_t v;
+    v.pos.x = x;
+    v.pos.y = y;
+    v.selected = FALSE;
+    v.children = malloc(MAX_VERTICES * sizeof(*v.children));
+    v.num_children = 0;
+    global_state->circles[global_state->num_circles++] = v;
+}
 
 // kills game with an error message
 void force_quit(const char *str) {
@@ -110,8 +122,29 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         return;
     }
 
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
+        global_state->modifying_vertex = TRUE;
+
+        v2f temp;
+        glfwGetCursorPos(window, &temp.x, &temp.y);
+        temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
+        temp.x -= global_state->last_translation.x;
+        temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
+        temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+        temp.y += global_state->last_translation.y;
+        for (int i = 0; i < global_state->num_circles; i++) {
+            double x = global_state->circles[i].pos.x - temp.x;
+            double y = -global_state->circles[i].pos.y - temp.y;
+            double r = 1.0f;
+            if (x * x + y * y <= r * r) {
+                global_state->modifying_vertex = i;
+                break;
+            }
+        }
+    }
+
     // handle vertice selection and dragging
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && !mods) {
         global_state->dragging_vertex = TRUE;
 
         v2f temp;
@@ -132,7 +165,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             }
         }
     }
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE && !mods) {
         global_state->dragging_vertex = FALSE;
     }
 
@@ -317,6 +350,7 @@ int main(int argc, char **argv) {
     global_state.delta_time = 0;
     global_state.dragging_map = FALSE;
     global_state.dragging_vertex = FALSE;
+    global_state.modifying_vertex = -1; // no vertex currently selected
     global_state.last_mouse.x = -1;
     global_state.last_mouse.y = -1;
     global_state.last_translation.x = 0;
@@ -327,15 +361,9 @@ int main(int argc, char **argv) {
     global_state.num_circles = 0;
     // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
-    global_state.circles[global_state.num_circles].pos.x = 0.0f;
-    global_state.circles[global_state.num_circles].pos.y = 0.0f;
-    global_state.num_circles++;
-    global_state.circles[global_state.num_circles].pos.x = 2.2f;
-    global_state.circles[global_state.num_circles].pos.y = 0.7f;
-    global_state.num_circles++;
-    global_state.circles[global_state.num_circles].pos.x = -1.4f;
-    global_state.circles[global_state.num_circles].pos.y = 2.1f;
-    global_state.num_circles++;
+    create_vertex(&global_state, 0.0, 0.0);
+    create_vertex(&global_state, 2.2, 0.7);
+    create_vertex(&global_state, -1.4, 2.1);
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
