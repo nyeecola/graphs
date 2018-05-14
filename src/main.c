@@ -25,6 +25,7 @@ typedef struct {
     double cur_translation_y;
     double *circles_x;
     double *circles_y;
+    bool *circles_selected;
     int num_circles;
 } global_state_t;
 
@@ -83,7 +84,21 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
         double temp_x, temp_y;
         glfwGetCursorPos(window, &temp_x, &temp_y);
-        // TODO
+        temp_x = (temp_x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
+        temp_x -= global_state->last_translation_x;
+        temp_y = (temp_y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
+        temp_y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+        temp_y += global_state->last_translation_y;
+        for (int i = 0; i < global_state->num_circles; i++) {
+            double x = global_state->circles_x[i] - temp_x;
+            double y = -global_state->circles_y[i] - temp_y;
+            double r = 1.0f;
+            if (x * x + y * y <= r * r) {
+                global_state->circles_selected[i] = true;
+            } else {
+                global_state->circles_selected[i] = false;
+            }
+        }
     }
 
     // handle map dragging
@@ -230,6 +245,7 @@ int main(int argc, char **argv) {
     GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
     GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
+    GLint color_uniform = glGetUniformLocation(shader_program, "color");
 
 
     // initialize global state
@@ -245,8 +261,8 @@ int main(int argc, char **argv) {
     global_state.cur_translation_y = 0;
     global_state.circles_x = malloc(MAX_VERTICES * sizeof(*global_state.circles_x));
     global_state.circles_y = malloc(MAX_VERTICES * sizeof(*global_state.circles_y));
+    global_state.circles_selected = malloc(MAX_VERTICES * sizeof(*global_state.circles_selected));
     global_state.num_circles = 0;
-
     // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
     global_state.circles_x[global_state.num_circles] = 0.0f;
@@ -278,7 +294,8 @@ int main(int argc, char **argv) {
             global_state.cur_translation_x /= global_state.zoom;
 
             global_state.cur_translation_y = (current_mouse_y - global_state.last_mouse_y);
-            global_state.cur_translation_y = (global_state.cur_translation_y / (DEFAULT_SCREEN_HEIGHT/2)) / ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            global_state.cur_translation_y = (global_state.cur_translation_y / (DEFAULT_SCREEN_HEIGHT/2));
+            global_state.cur_translation_y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
             global_state.cur_translation_y *= -1;
             global_state.cur_translation_y /= global_state.zoom;
         }
@@ -297,6 +314,11 @@ int main(int argc, char **argv) {
             double x = frame_translation_x + global_state.circles_x[i];
             double y = frame_translation_y + global_state.circles_y[i];
             glUniform3f(translation_uniform, x, y, 0.0f);
+            if (global_state.circles_selected[i]) {
+                glUniform3f(color_uniform, 1.0f, 0.6f, 0.3f);
+            } else {
+                glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
+            }
             glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
         }
         glBindVertexArray(0);
