@@ -104,16 +104,18 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         return;
     }
 
-    // no-op
-}
+    // create vertex when N is pressed
+    if (key == GLFW_KEY_N && action == GLFW_PRESS) {
+        v2f temp;
+        glfwGetCursorPos(window, &temp.x, &temp.y);
+        temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
+        temp.x -= global_state->last_translation.x;
+        temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
+        temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+        temp.y += global_state->last_translation.y;
 
-void cursor_pos_callback(GLFWwindow *window, double x, double y) {
-    global_state_t *global_state = glfwGetWindowUserPointer(window);
-    if (global_state == NULL) { // program not fully initilized yet
-        return;
+        create_vertex(global_state, temp.x, -temp.y);
     }
-
-    // no-op
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
@@ -236,7 +238,6 @@ int main(int argc, char **argv) {
 
     glfwMakeContextCurrent(window);
     glfwSetKeyCallback(window, key_callback);
-    glfwSetCursorPosCallback(window, cursor_pos_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
