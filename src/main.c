@@ -123,8 +123,6 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
 
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
-        global_state->modifying_vertex = TRUE;
-
         v2f temp;
         glfwGetCursorPos(window, &temp.x, &temp.y);
         temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
@@ -167,8 +165,30 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             }
         }
     }
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE && !mods) {
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
         global_state->dragging_vertex = FALSE;
+        if (global_state->modifying_vertex != -1) {
+            v2f temp;
+            glfwGetCursorPos(window, &temp.x, &temp.y);
+            temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
+            temp.x -= global_state->last_translation.x;
+            temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
+            temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+            temp.y += global_state->last_translation.y;
+
+            for (int i = 0; i < global_state->num_circles; i++) {
+                double x = global_state->circles[i].pos.x - temp.x;
+                double y = -global_state->circles[i].pos.y - temp.y;
+                double r = 1.0f;
+                if (x * x + y * y <= r * r) {
+                    // TODO: check if vertice doesn't already belong to children
+                    int vertex = global_state->modifying_vertex;
+                    global_state->circles[vertex].children[global_state->circles[vertex].num_children++] = i;
+                    break;
+                }
+            }
+        }
+        global_state->modifying_vertex = -1;
     }
 
     // handle map dragging
@@ -372,8 +392,6 @@ int main(int argc, char **argv) {
     create_vertex(&global_state, -0.5, -0.4);
     create_vertex(&global_state, 2.2, 0.7);
     create_vertex(&global_state, -1.4, 2.1);
-    global_state.circles[0].children[global_state.circles[0].num_children++] = 1;
-    global_state.circles[0].children[global_state.circles[0].num_children++] = 2;
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
@@ -474,14 +492,12 @@ int main(int argc, char **argv) {
         if (global_state.modifying_vertex != -1) {
             double x1 = frame_translation.x + global_state.circles[global_state.modifying_vertex].pos.x;
             double y1 = frame_translation.y + global_state.circles[global_state.modifying_vertex].pos.y;
-            double x2 = (current_mouse.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state.zoom;
-            x2 -= global_state.last_translation.x;
-            double y2 = (current_mouse.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state.zoom;
+            double x2 = ((frame_translation.x + current_mouse.x) / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state.zoom;
+            double y2 = ((frame_translation.y + current_mouse.y) / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state.zoom;
             y2 /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-            y2 += global_state.last_translation.y;
             GLfloat line_vertices[3 * 2] = {
-                x1, y1, -0.2,
-                x2, -y2, -0.2,
+                x1, y1, 0.2,
+                x2, -y2, 0.2,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO2);
             glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
