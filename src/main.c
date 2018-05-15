@@ -219,13 +219,19 @@ void scroll_callback(GLFWwindow *window, double x, double y) {
     global_state->zoom = max(global_state->zoom, 0.04);
 }
 
-v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
+v2f get_cursor_untranslated_world_space(GLFWwindow *window, double zoom) {
     v2f current_mouse;
     glfwGetCursorPos(window, &current_mouse.x, &current_mouse.y);
     double x = (current_mouse.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / zoom;
     double y = -(current_mouse.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / zoom;
     y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
     v2f r = {x, y};
+    return r;
+}
+
+v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
+    v2f untranslated = get_cursor_untranslated_world_space(window, zoom);
+    v2f r = sub(untranslated, translation);
     return r;
 }
 
@@ -430,12 +436,10 @@ int main(int argc, char **argv) {
             global_state.cur_translation.y *= -1;
             global_state.cur_translation.y /= global_state.zoom;
         }
-        // TODO; make sure this works if currently also dragging map
+        // TODO; make sure this works if currently also dragging map (does it need to?)
         // TODO: make it possible to drag multiple vertices simultaneously
         if (global_state.dragging_vertex) {
             v2f temp = get_cursor_world_space(window, global_state.last_translation, global_state.zoom);
-            temp.x -= global_state.last_translation.x; // TODO: understand why this is needed
-            temp.y -= global_state.last_translation.y;
             for (int i = 0; i < global_state.num_circles; i++) {
                 if (global_state.circles[i].selected) {
                     global_state.circles[i].pos.x = temp.x;
@@ -459,12 +463,8 @@ int main(int argc, char **argv) {
         // draw vertices
         glBindVertexArray(VAO);
         for (int i = 0; i < global_state.num_circles; i++) {
-            double x = frame_translation.x + global_state.circles[i].pos.x;
-            double y = frame_translation.y + global_state.circles[i].pos.y;
-            glUniform3f(translation_uniform, x, y, 0.0f);
-            //double x = global_state.circles[i].pos.x;
-            //double y = global_state.circles[i].pos.y;
-            //glUniform3f(translation_uniform, x, y, 0.0f);
+            v2f v = add(frame_translation, global_state.circles[i].pos);
+            glUniform3f(translation_uniform, v.x, v.y, 0.0f);
             if (global_state.circles[i].selected) {
                 glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
             } else {
@@ -483,13 +483,11 @@ int main(int argc, char **argv) {
         // vertices children
         for (int i = 0; i < global_state.num_circles; i++) {
             for (int j = 0; j < global_state.circles[i].num_children; j++) {
-                double x1 = frame_translation.x + global_state.circles[i].pos.x;
-                double y1 = frame_translation.y + global_state.circles[i].pos.y;
-                double x2 = frame_translation.x + global_state.circles[global_state.circles[i].children[j]].pos.x; 
-                double y2 = frame_translation.y + global_state.circles[global_state.circles[i].children[j]].pos.y; 
+                v2f v1 = add(frame_translation, global_state.circles[i].pos);
+                v2f v2 = add(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
                 GLfloat line_vertices[3 * 2] = {
-                    x1, y1, 0.2,
-                    x2, y2, 0.2,
+                    v1.x, v1.y, 0.2,
+                    v2.x, v2.y, 0.2,
                 };
                 glBindBuffer(GL_ARRAY_BUFFER, VBO2);
                 glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
@@ -501,12 +499,11 @@ int main(int argc, char **argv) {
 
         // arrow being currently created
         if (global_state.modifying_vertex != -1) {
-            double x1 = frame_translation.x + global_state.circles[global_state.modifying_vertex].pos.x;
-            double y1 = frame_translation.y + global_state.circles[global_state.modifying_vertex].pos.y;
-            v2f v2 = get_cursor_world_space(window, frame_translation, global_state.zoom);
+            v2f v1 = add(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
+            v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
             GLfloat line_vertices[3 * 2] = {
-                x1, y1, -0.2,
-                v2.x, v2.y, -0.2,
+                v1.x, v1.y, 0.2,
+                v2.x, v2.y, 0.2,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO2);
             glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
