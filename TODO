@@ -1,10 +1,9 @@
 High priority:
-- Add better math (proper vectors)
+- Clean up coordinate system
 
 Normal priority:
 - Create documentation
-- Clean up coordinate system
-- Make it possible for the user to add arrows
+- Make it possible for the user to add arrows with directions
 - Make it so that multiple vertices can be dragged at the same time 
 - Make it so that multiple vertices can be modified at the same time 
 - Zoom on mouse cursor
