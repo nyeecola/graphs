@@ -34,6 +34,11 @@ v2f sub(v2f v1, v2f v2) {
     return v;
 }
 
+v2f scale(v2f v, double scalar) {
+    v2f r = {v.x * scalar, v.y * scalar};
+    return r;
+}
+
 float dot(v2f v1, v2f v2) {
     return v1.x * v2.x + v1.y * v2.y;
 }
@@ -98,23 +103,36 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
+v2f get_untranslated_world_space(GLFWwindow *window, double zoom, v2f v) {
+    double x = (v.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / zoom;
+    double y = -((v.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / zoom) / ASPECT_RATIO;
+    v2f r = {x, y};
+    return r;
+}
+
+v2f get_cursor_untranslated_world_space(GLFWwindow *window, double zoom) {
+    v2f current_mouse;
+    glfwGetCursorPos(window, &current_mouse.x, &current_mouse.y);
+    v2f r = get_untranslated_world_space(window, zoom, current_mouse);
+    return r;
+}
+
+v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
+    v2f untranslated = get_cursor_untranslated_world_space(window, zoom);
+    v2f r = sub(untranslated, translation);
+    return r;
+}
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     global_state_t *global_state = glfwGetWindowUserPointer(window);
     if (global_state == NULL) { // program not fully initilized yet
         return;
     }
 
-    // create vertex when N is pressed
-    if (key == GLFW_KEY_N && action == GLFW_PRESS) {
-        v2f temp;
-        glfwGetCursorPos(window, &temp.x, &temp.y);
-        temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
-        temp.x -= global_state->last_translation.x;
-        temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
-        temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-        temp.y += global_state->last_translation.y;
-
-        create_vertex(global_state, temp.x, -temp.y);
+    // create vertex when A is pressed
+    if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+        v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
+        create_vertex(global_state, pos.x, pos.y);
     }
 }
 
@@ -124,21 +142,15 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
         return;
     }
 
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
-        v2f temp;
-        glfwGetCursorPos(window, &temp.x, &temp.y);
-        temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
-        temp.x -= global_state->last_translation.x;
-        temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
-        temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-        temp.y += global_state->last_translation.y;
+    v2f mouse_pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
 
+    // handle adding dependencies
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
         global_state->modifying_vertex = -1; // unselect vertices
         for (int i = 0; i < global_state->num_circles; i++) {
-            double x = global_state->circles[i].pos.x - temp.x;
-            double y = -global_state->circles[i].pos.y - temp.y;
+            v2f p = sub(global_state->circles[i].pos, mouse_pos);
             double r = 1.0f;
-            if (x * x + y * y <= r * r) {
+            if (p.x * p.x + p.y * p.y <= r * r) {
                 global_state->modifying_vertex = i;
                 break;
             }
@@ -148,19 +160,10 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     // handle vertice selection and dragging
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && !mods) {
         global_state->dragging_vertex = TRUE;
-
-        v2f temp;
-        glfwGetCursorPos(window, &temp.x, &temp.y);
-        temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
-        temp.x -= global_state->last_translation.x;
-        temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
-        temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-        temp.y += global_state->last_translation.y;
         for (int i = 0; i < global_state->num_circles; i++) {
-            double x = global_state->circles[i].pos.x - temp.x;
-            double y = -global_state->circles[i].pos.y - temp.y;
+            v2f p = sub(global_state->circles[i].pos, mouse_pos);
             double r = 1.0f;
-            if (x * x + y * y <= r * r) {
+            if (p.x * p.x + p.y * p.y <= r * r) {
                 global_state->circles[i].selected = true;
             } else {
                 global_state->circles[i].selected = false;
@@ -170,19 +173,10 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
         global_state->dragging_vertex = FALSE;
         if (global_state->modifying_vertex != -1) {
-            v2f temp;
-            glfwGetCursorPos(window, &temp.x, &temp.y);
-            temp.x = (temp.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / global_state->zoom;
-            temp.x -= global_state->last_translation.x;
-            temp.y = (temp.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / global_state->zoom;
-            temp.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-            temp.y += global_state->last_translation.y;
-
             for (int i = 0; i < global_state->num_circles; i++) {
-                double x = global_state->circles[i].pos.x - temp.x;
-                double y = -global_state->circles[i].pos.y - temp.y;
+                v2f p = sub(global_state->circles[i].pos, mouse_pos);
                 double r = 1.0f;
-                if (x * x + y * y <= r * r) {
+                if (p.x * p.x + p.y * p.y <= r * r) {
                     // TODO: check if vertice doesn't already belong to children
                     int vertex = global_state->modifying_vertex;
                     global_state->circles[vertex].children[global_state->circles[vertex].num_children++] = i;
@@ -200,10 +194,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
     if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE && global_state->dragging_map) {
         global_state->dragging_map = false;
-        global_state->last_translation.x += global_state->cur_translation.x;
-        global_state->last_translation.y += global_state->cur_translation.y;
-        global_state->cur_translation.x = 0;
-        global_state->cur_translation.y = 0;
+        global_state->last_translation = add(global_state->last_translation, global_state->cur_translation);
+        global_state->cur_translation = V2F(0, 0);
     }
 }
 
@@ -217,22 +209,6 @@ void scroll_callback(GLFWwindow *window, double x, double y) {
     //global_state->zoom += 0.1 * y * global_state->delta_time;
     global_state->zoom += 0.02 * y;
     global_state->zoom = max(global_state->zoom, 0.04);
-}
-
-v2f get_cursor_untranslated_world_space(GLFWwindow *window, double zoom) {
-    v2f current_mouse;
-    glfwGetCursorPos(window, &current_mouse.x, &current_mouse.y);
-    double x = (current_mouse.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / zoom;
-    double y = -(current_mouse.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / zoom;
-    y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-    v2f r = {x, y};
-    return r;
-}
-
-v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
-    v2f untranslated = get_cursor_untranslated_world_space(window, zoom);
-    v2f r = sub(untranslated, translation);
-    return r;
 }
 
 int main(int argc, char **argv) {
@@ -426,15 +402,9 @@ int main(int argc, char **argv) {
         v2f current_mouse;
         glfwGetCursorPos(window, &current_mouse.x, &current_mouse.y);
         if (global_state.dragging_map) {
-            global_state.cur_translation.x = (current_mouse.x - global_state.last_mouse.x);
-            global_state.cur_translation.x = (global_state.cur_translation.x / (DEFAULT_SCREEN_WIDTH/2));
-            global_state.cur_translation.x /= global_state.zoom;
-
-            global_state.cur_translation.y = (current_mouse.y - global_state.last_mouse.y);
-            global_state.cur_translation.y = (global_state.cur_translation.y / (DEFAULT_SCREEN_HEIGHT/2));
-            global_state.cur_translation.y /= ((float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
-            global_state.cur_translation.y *= -1;
-            global_state.cur_translation.y /= global_state.zoom;
+            v2f last = get_untranslated_world_space(window, global_state.zoom, current_mouse);
+            v2f now = get_untranslated_world_space(window, global_state.zoom, global_state.last_mouse);
+            global_state.cur_translation = scale(sub(now, last), -1);
         }
         // TODO; make sure this works if currently also dragging map (does it need to?)
         // TODO: make it possible to drag multiple vertices simultaneously
@@ -453,7 +423,7 @@ int main(int argc, char **argv) {
 
         glUseProgram(shader_program);
         glUniform1f(scale_uniform, global_state.zoom);
-        glUniform1f(aspect_ratio_uniform, (float) DEFAULT_SCREEN_WIDTH / (float) DEFAULT_SCREEN_HEIGHT);
+        glUniform1f(aspect_ratio_uniform, ASPECT_RATIO);
 
         // screen position
         v2f frame_translation;
