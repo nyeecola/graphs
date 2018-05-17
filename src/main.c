@@ -14,38 +14,11 @@
 #define max(a, b) (a > b ? a : b)
 #define min(a, b) (a < b ? a : b)
 
-typedef struct {
-    double x;
-    double y;
-} v2f;
-
-v2f V2F(float x, float y) {
-    v2f v = {x, y};
-    return v;
-}
-
-v2f add(v2f v1, v2f v2) {
-    v2f v = {v1.x + v2.x, v1.y + v2.y};
-    return v;
-}
-
-v2f sub(v2f v1, v2f v2) {
-    v2f v = {v1.x - v2.x, v1.y - v2.y};
-    return v;
-}
-
-v2f scale(v2f v, double scalar) {
-    v2f r = {v.x * scalar, v.y * scalar};
-    return r;
-}
-
-float dot(v2f v1, v2f v2) {
-    return v1.x * v2.x + v1.y * v2.y;
-}
-
-float magnitude(v2f v1) {
-    return sqrt(v1.x * v1.x + v1.y * v1.y);
-}
+#define NUMERIC_TYPE double
+#define TYPE_NAME v2f
+#include "math.c"
+#undef NUMERIC_TYPE
+#undef TYPE_NAME
 
 typedef struct {
     v2f pos;
@@ -109,7 +82,7 @@ v2f get_cursor_untranslated_world_space(GLFWwindow *window, double zoom) {
 
 v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
     v2f untranslated = get_cursor_untranslated_world_space(window, zoom);
-    v2f r = sub(untranslated, translation);
+    v2f r = sub_v2f(untranslated, translation);
     return r;
 }
 
@@ -122,7 +95,6 @@ void create_vertex(global_state_t *global_state, v2f p) {
     global_state->circles[global_state->num_circles++] = v;
 }
 
-// TODO: figure out what is bugged here
 void delete_vertex(global_state_t *global_state, int index) {
     global_state->dragging_vertex = FALSE;
     for (int i = 0; i < global_state->num_circles; i++) {
@@ -166,7 +138,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_D && action == GLFW_PRESS) {
         v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
         for (int i = 0; i < global_state->num_circles; i++) {
-            v2f p = sub(global_state->circles[i].pos, pos);
+            v2f p = sub_v2f(global_state->circles[i].pos, pos);
             double r = 1.0f;
             if (p.x * p.x + p.y * p.y <= r * r) {
                 delete_vertex(global_state, i);
@@ -188,7 +160,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
         global_state->modifying_vertex = -1; // unselect vertices
         for (int i = 0; i < global_state->num_circles; i++) {
-            v2f p = sub(global_state->circles[i].pos, mouse_pos);
+            v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
             double r = 1.0f;
             if (p.x * p.x + p.y * p.y <= r * r) {
                 global_state->modifying_vertex = i;
@@ -205,7 +177,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
                 global_state->circles[i].selected = false;
             }
             for (int i = 0; i < global_state->num_circles; i++) {
-                v2f p = sub(global_state->circles[i].pos, mouse_pos);
+                v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
                 double r = 1.0f;
                 if (p.x * p.x + p.y * p.y <= r * r) {
                     global_state->circles[i].selected = true;
@@ -219,7 +191,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
             if (global_state->modifying_vertex != -1) {
                 int vertex = global_state->modifying_vertex;
                 for (int i = 0; i < global_state->num_circles; i++) {
-                    v2f p = sub(global_state->circles[i].pos, mouse_pos);
+                    v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
                     double r = 1.0f;
                     if (p.x * p.x + p.y * p.y <= r * r) {
                         // check if vertice doesn't already belong to children
@@ -248,8 +220,8 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
     if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_RELEASE && global_state->dragging_map) {
         global_state->dragging_map = false;
-        global_state->last_translation = add(global_state->last_translation, global_state->cur_translation);
-        global_state->cur_translation = V2F(0, 0);
+        global_state->last_translation = add_v2f(global_state->last_translation, global_state->cur_translation);
+        global_state->cur_translation = create_v2f(0, 0);
     }
 }
 
@@ -434,11 +406,10 @@ int main(int argc, char **argv) {
     global_state.cur_translation.y = 0;
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
     global_state.num_circles = 0;
-    // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, V2F(-0.5, -0.4));
-    create_vertex(&global_state, V2F(2.2, 0.7));
-    create_vertex(&global_state, V2F(-1.4, 2.1));
+    create_vertex(&global_state, create_v2f(-0.5, -0.4));
+    create_vertex(&global_state, create_v2f(2.2, 0.7));
+    create_vertex(&global_state, create_v2f(-1.4, 2.1));
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
@@ -458,7 +429,7 @@ int main(int argc, char **argv) {
         if (global_state.dragging_map) {
             v2f last = get_untranslated_world_space(window, global_state.zoom, current_mouse);
             v2f now = get_untranslated_world_space(window, global_state.zoom, global_state.last_mouse);
-            global_state.cur_translation = scale(sub(now, last), -1);
+            global_state.cur_translation = scale_v2f(sub_v2f(now, last), -1);
         }
         // TODO; make sure this works if currently also dragging map (does it need to?)
         // TODO: make it possible to drag multiple vertices simultaneously
@@ -487,7 +458,7 @@ int main(int argc, char **argv) {
         // draw vertices
         glBindVertexArray(VAO);
         for (int i = 0; i < global_state.num_circles; i++) {
-            v2f v = add(frame_translation, global_state.circles[i].pos);
+            v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
             glUniform3f(translation_uniform, v.x, v.y, 0.0f);
             if (global_state.circles[i].selected) {
                 glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
@@ -507,8 +478,8 @@ int main(int argc, char **argv) {
         // vertices children
         for (int i = 0; i < global_state.num_circles; i++) {
             for (int j = 0; j < global_state.circles[i].num_children; j++) {
-                v2f v1 = add(frame_translation, global_state.circles[i].pos);
-                v2f v2 = add(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
+                v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
+                v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
                 GLfloat line_vertices[3 * 2] = {
                     v1.x, v1.y, 0.2,
                     v2.x, v2.y, 0.2,
@@ -523,7 +494,7 @@ int main(int argc, char **argv) {
 
         // arrow being currently created
         if (global_state.modifying_vertex != -1) {
-            v2f v1 = add(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
+            v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
             v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
             GLfloat line_vertices[3 * 2] = {
                 v1.x, v1.y, 0.2,
