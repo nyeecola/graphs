@@ -67,16 +67,6 @@ typedef struct {
     int num_circles;
 } global_state_t;
 
-void create_vertex(global_state_t *global_state, double x, double y) {
-    vertex_t v;
-    v.pos.x = x;
-    v.pos.y = y;
-    v.selected = FALSE;
-    v.children = malloc(MAX_VERTICES * sizeof(*v.children));
-    v.num_children = 0;
-    global_state->circles[global_state->num_circles++] = v;
-}
-
 // kills game with an error message
 void force_quit(const char *str) {
     fprintf(stderr, "Fatal error: %s\n", str);
@@ -123,6 +113,43 @@ v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
     return r;
 }
 
+void create_vertex(global_state_t *global_state, v2f p) {
+    vertex_t v;
+    v.pos = p;
+    v.selected = FALSE;
+    v.children = malloc(MAX_VERTICES * sizeof(*v.children));
+    v.num_children = 0;
+    global_state->circles[global_state->num_circles++] = v;
+}
+
+// TODO: figure out what is bugged here
+void delete_vertex(global_state_t *global_state, int index) {
+    global_state->dragging_vertex = FALSE;
+    for (int i = 0; i < global_state->num_circles; i++) {
+        int removed_location = -1;
+        for (int j = 0; j < global_state->circles[i].num_children; j++) {
+            if (global_state->circles[i].children[j] == index) {
+                assert(removed_location == -1);
+                removed_location = j;
+            } else if (global_state->circles[i].children[j] > index) {
+                global_state->circles[i].children[j]--;
+            }
+        }
+        if (removed_location != -1) {
+            for (int j = removed_location + 1; j < global_state->circles[i].num_children; j++) {
+                global_state->circles[i].children[j-1] = global_state->circles[i].children[j];
+            }
+            global_state->circles[i].num_children--;
+        }
+    }
+
+    free(global_state->circles[index].children);
+    for (int i = index + 1; i < global_state->num_circles; i++) {
+        global_state->circles[i-1] = global_state->circles[i];
+    }
+    global_state->num_circles--;
+}
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     global_state_t *global_state = glfwGetWindowUserPointer(window);
     if (global_state == NULL) { // program not fully initilized yet
@@ -132,7 +159,20 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
         v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
-        create_vertex(global_state, pos.x, pos.y);
+        create_vertex(global_state, pos);
+    }
+
+    // delete vertex when D is pressed
+    if (key == GLFW_KEY_D && action == GLFW_PRESS) {
+        v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
+        for (int i = 0; i < global_state->num_circles; i++) {
+            v2f p = sub(global_state->circles[i].pos, pos);
+            double r = 1.0f;
+            if (p.x * p.x + p.y * p.y <= r * r) {
+                delete_vertex(global_state, i);
+                break;
+            }
+        }
     }
 }
 
@@ -158,33 +198,47 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     }
 
     // handle vertice selection and dragging
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && !mods) {
-        global_state->dragging_vertex = TRUE;
-        for (int i = 0; i < global_state->num_circles; i++) {
-            v2f p = sub(global_state->circles[i].pos, mouse_pos);
-            double r = 1.0f;
-            if (p.x * p.x + p.y * p.y <= r * r) {
-                global_state->circles[i].selected = true;
-            } else {
+    {
+        if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && !mods) {
+            global_state->dragging_vertex = TRUE;
+            for (int i = 0; i < global_state->num_circles; i++) {
                 global_state->circles[i].selected = false;
             }
-        }
-    }
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
-        global_state->dragging_vertex = FALSE;
-        if (global_state->modifying_vertex != -1) {
             for (int i = 0; i < global_state->num_circles; i++) {
                 v2f p = sub(global_state->circles[i].pos, mouse_pos);
                 double r = 1.0f;
                 if (p.x * p.x + p.y * p.y <= r * r) {
-                    // TODO: check if vertice doesn't already belong to children
-                    int vertex = global_state->modifying_vertex;
-                    global_state->circles[vertex].children[global_state->circles[vertex].num_children++] = i;
+                    global_state->circles[i].selected = true;
                     break;
                 }
             }
         }
-        global_state->modifying_vertex = -1;
+
+        if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_RELEASE) {
+            global_state->dragging_vertex = FALSE;
+            if (global_state->modifying_vertex != -1) {
+                int vertex = global_state->modifying_vertex;
+                for (int i = 0; i < global_state->num_circles; i++) {
+                    v2f p = sub(global_state->circles[i].pos, mouse_pos);
+                    double r = 1.0f;
+                    if (p.x * p.x + p.y * p.y <= r * r) {
+                        // check if vertice doesn't already belong to children
+                        bool is_child_already = false;
+                        for (int j = 0; j < global_state->circles[vertex].num_children; j++) {
+                            if (global_state->circles[vertex].children[j] == i) {
+                                is_child_already = true;
+                            }
+                        }
+
+                        if (!is_child_already) {
+                            global_state->circles[vertex].children[global_state->circles[vertex].num_children++] = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            global_state->modifying_vertex = -1;
+        }
     }
 
     // handle map dragging
@@ -382,9 +436,9 @@ int main(int argc, char **argv) {
     global_state.num_circles = 0;
     // TODO: actually implement a way to add/remove circles
     // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, -0.5, -0.4);
-    create_vertex(&global_state, 2.2, 0.7);
-    create_vertex(&global_state, -1.4, 2.1);
+    create_vertex(&global_state, V2F(-0.5, -0.4));
+    create_vertex(&global_state, V2F(2.2, 0.7));
+    create_vertex(&global_state, V2F(-1.4, 2.1));
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
