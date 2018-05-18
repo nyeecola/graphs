@@ -12,4 +12,4 @@ clean:
 
 run:
 	@echo ""
-	optirun ./build/main.exe
+	./build/main.exe

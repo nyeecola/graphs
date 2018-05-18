@@ -180,7 +180,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
     v2f mouse_pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
 
     // handle adding dependencies
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && mods | GLFW_MOD_CONTROL) {
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && (mods & GLFW_MOD_CONTROL)) {
         global_state->modifying_vertex = -1; // unselect vertices
         for (int i = 0; i < global_state->num_circles; i++) {
             v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
@@ -522,12 +522,7 @@ int main(int argc, char **argv) {
                     v2f p1 = scale_v2f(v2v1, r);
                     double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
                     if (magv1p1 >= r) {
-                        v2f temp;
-                        //if (global_state.zoom < 0.2f) {
-                            //temp = scale_v2f(p1, 2 + ARROW_HEAD_CONSTANT);
-                        //} else {
-                            temp = scale_v2f(p1, 1 + ARROW_HEAD_CONSTANT);
-                        //}
+                        v2f temp = scale_v2f(p1, (1 + ARROW_HEAD_CONSTANT));
                         v2f temp2 = sub_v2f(p1, temp);
                         v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
                         v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
