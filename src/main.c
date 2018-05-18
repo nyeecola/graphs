@@ -66,6 +66,17 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
+void BFS(global_state_t *global_state, int root_index) {
+    int queue[MAX_VERTICES];
+    int queue_start = 0;
+    int queue_end = 0;
+    queue[queue_end++] = root_index;
+    while (queue_start < queue_end) {
+        int node = queue[queue_start++];
+        // TODO
+    }
+}
+
 v2f get_untranslated_world_space(GLFWwindow *window, double zoom, v2f v) {
     double x = (v.x / (DEFAULT_SCREEN_WIDTH / 2) - 1.0f) / zoom;
     double y = -((v.y / (DEFAULT_SCREEN_HEIGHT / 2) - 1.0f) / zoom) / ASPECT_RATIO;
@@ -128,20 +139,32 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         return;
     }
 
+    v2f cursor_pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
+
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
-        create_vertex(global_state, pos);
+        create_vertex(global_state, cursor_pos);
     }
 
     // delete vertex when D is pressed
     if (key == GLFW_KEY_D && action == GLFW_PRESS) {
-        v2f pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
         for (int i = 0; i < global_state->num_circles; i++) {
-            v2f p = sub_v2f(global_state->circles[i].pos, pos);
+            v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
             double r = 1.0f;
             if (p.x * p.x + p.y * p.y <= r * r) {
                 delete_vertex(global_state, i);
+                break;
+            }
+        }
+    }
+
+    // run BFS when 1 is pressed
+    if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+        for (int i = 0; i < global_state->num_circles; i++) {
+            v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
+            double r = 1.0f;
+            if (p.x * p.x + p.y * p.y <= r * r) {
+                BFS(global_state, i);
                 break;
             }
         }
@@ -478,6 +501,7 @@ int main(int argc, char **argv) {
         // vertices children
         for (int i = 0; i < global_state.num_circles; i++) {
             for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                // draw arrow body
                 v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
                 v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
                 GLfloat line_vertices[3 * 2] = {
@@ -489,6 +513,39 @@ int main(int argc, char **argv) {
                 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
                 glEnableVertexAttribArray(0);
                 glDrawArrays(GL_LINES, 0, 2);
+
+                // draw arrow head
+                double r = 1.0f;
+                double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
+                if (magv2v1 > 0.001f) {
+                    v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
+                    v2f p1 = scale_v2f(v2v1, r);
+                    double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
+                    if (magv1p1 >= r) {
+                        v2f temp;
+                        //if (global_state.zoom < 0.2f) {
+                            //temp = scale_v2f(p1, 2 + ARROW_HEAD_CONSTANT);
+                        //} else {
+                            temp = scale_v2f(p1, 1 + ARROW_HEAD_CONSTANT);
+                        //}
+                        v2f temp2 = sub_v2f(p1, temp);
+                        v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
+                        v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
+                        p1 = add_v2f(v2, p1);
+                        p2 = add_v2f(v2, p2);
+                        p3 = add_v2f(v2, p3);
+                        GLfloat arrow_vertices[3 * 3] = {
+                            p2.x, p2.y, 0.2,
+                            p1.x, p1.y, 0.2,
+                            p3.x, p3.y, 0.2,
+                        };
+                        glBindBuffer(GL_ARRAY_BUFFER, VBO2);
+                        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+                        glEnableVertexAttribArray(0);
+                        glDrawArrays(GL_TRIANGLES, 0, 3);
+                    }
+                }
             }
         }
 
@@ -505,6 +562,35 @@ int main(int argc, char **argv) {
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
             glEnableVertexAttribArray(0);
             glDrawArrays(GL_LINES, 0, 2);
+
+            // draw arrow head
+            double r = 1.0f;
+            double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
+            if (magv2v1 > 0.001f) {
+                v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
+                v2f p1 = create_v2f(0, 0);
+                double magv1p1 = magnitude_v2f(sub_v2f(p1, v1));
+                if (magv1p1 >= r) {
+                    v2f temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT);
+                    v2f temp2 = scale_v2f(temp, -1);
+                    temp2 = add_v2f(scale_v2f(temp, 2), temp2);
+                    v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
+                    v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
+                    p1 = add_v2f(v2, p1);
+                    p2 = add_v2f(v2, p2);
+                    p3 = add_v2f(v2, p3);
+                    GLfloat arrow_vertices[3 * 3] = {
+                        p2.x, p2.y, 0.2,
+                        p1.x, p1.y, 0.2,
+                        p3.x, p3.y, 0.2,
+                    };
+                    glBindBuffer(GL_ARRAY_BUFFER, VBO2);
+                    glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+                    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+                    glEnableVertexAttribArray(0);
+                    glDrawArrays(GL_TRIANGLES, 0, 3);
+                }
+            }
         }
 
         glBindVertexArray(0);

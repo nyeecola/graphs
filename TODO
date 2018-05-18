@@ -1,5 +1,5 @@
 High priority:
-- Clean up coordinate system
+- Clean up drawing arrow head
 
 Normal priority:
 - Create documentation
@@ -10,6 +10,9 @@ Normal priority:
 - Hardware cursor
 - Create user interface (with drag and drop)
 - Figure out why MSAA is not working (test on windows)
+- Create BFS
+- Create DFS
+- Add "flood" animation
 
 Low priority:
 - Render using instancing

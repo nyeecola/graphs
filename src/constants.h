@@ -5,3 +5,5 @@
 #define NUM_SECTIONS_CIRCLE 60
 
 #define MAX_VERTICES 100
+
+#define ARROW_HEAD_CONSTANT 0.3f

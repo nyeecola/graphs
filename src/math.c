@@ -4,11 +4,13 @@
 #define _scale(x) scale_##x
 #define _dot(x) dot_##x
 #define _magnitude(x) magnitude_##x
+#define _normalize(x) normalize_##x
 #define create(x) _create(x)
 #define add(x) _add(x)
 #define sub(x) _sub(x)
 #define dot(x) _dot(x)
 #define magnitude(x) _magnitude(x)
+#define normalize(x) _normalize(x)
 #define scale(x) _scale(x)
 
 typedef struct {
@@ -44,15 +46,23 @@ NUMERIC_TYPE magnitude(TYPE_NAME)(TYPE_NAME v1) {
     return sqrt(v1.x * v1.x + v1.y * v1.y);
 }
 
+TYPE_NAME normalize(TYPE_NAME)(TYPE_NAME v1) {
+    double mag = magnitude_v2f(v1);
+    assert(mag > 0);
+    return scale(TYPE_NAME)(v1, 1/mag);
+}
+
 #undef create
 #undef add
 #undef sub
 #undef scale
 #undef dot
 #undef magnitude
+#undef normalize
 #undef _create
 #undef _add
 #undef _sub
 #undef _scale
 #undef _dot
 #undef _magnitude
+#undef _normalize
