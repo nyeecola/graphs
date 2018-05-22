@@ -260,6 +260,57 @@ void scroll_callback(GLFWwindow *window, double x, double y) {
     global_state->zoom = max(global_state->zoom, 0.04);
 }
 
+void draw_arrow(int VBO, global_state_t *global_state, v2f v1, v2f v2, bool circle) {
+    // draw arrow body
+    GLfloat line_vertices[3 * 2] = {
+        v1.x, v1.y, 0.2,
+        v2.x, v2.y, 0.2,
+    };
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+    glEnableVertexAttribArray(0);
+    glDrawArrays(GL_LINES, 0, 2);
+
+    // draw arrow head
+    double r = 1.0f;
+    double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
+    if (magv2v1 > 0.001f) {
+        v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
+        v2f p1;
+        if (circle) {
+            p1 = scale_v2f(v2v1, r);
+        } else {
+            p1 = scale_v2f(v2v1, 0.01f);
+        }
+        double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
+        if (magv1p1 >= r || !circle) {
+            v2f temp;
+            if (circle) {
+                temp = scale_v2f(v2v1, 1 + ARROW_HEAD_CONSTANT / global_state->zoom);
+            } else {
+                temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT / global_state->zoom);
+            }
+            v2f temp2 = sub_v2f(p1, temp);
+            v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
+            v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
+            p1 = add_v2f(v2, p1);
+            p2 = add_v2f(v2, p2);
+            p3 = add_v2f(v2, p3);
+            GLfloat arrow_vertices[3 * 3] = {
+                p2.x, p2.y, 0.2,
+                p1.x, p1.y, 0.2,
+                p3.x, p3.y, 0.2,
+            };
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     // glfw, gl3w and context initialization
 
@@ -493,98 +544,25 @@ int main(int argc, char **argv) {
         glBindVertexArray(0);
 
         // draw arrows
-        // TODO: add direction
-        glBindVertexArray(VAO2);
-        glUniform3f(translation_uniform, 0, 0, 0.0f);
-        glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
+        {
+            glBindVertexArray(VAO2);
+            glUniform3f(translation_uniform, 0, 0, 0.0f);
+            glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
 
-        // vertices children
-        for (int i = 0; i < global_state.num_circles; i++) {
-            for (int j = 0; j < global_state.circles[i].num_children; j++) {
-                // draw arrow body
-                v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
-                v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
-                GLfloat line_vertices[3 * 2] = {
-                    v1.x, v1.y, 0.2,
-                    v2.x, v2.y, 0.2,
-                };
-                glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-                glEnableVertexAttribArray(0);
-                glDrawArrays(GL_LINES, 0, 2);
-
-                // draw arrow head
-                double r = 1.0f;
-                double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
-                if (magv2v1 > 0.001f) {
-                    v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
-                    v2f p1 = scale_v2f(v2v1, r);
-                    double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
-                    if (magv1p1 >= r) {
-                        v2f temp = scale_v2f(p1, 1 + ARROW_HEAD_CONSTANT / global_state.zoom);
-                        v2f temp2 = sub_v2f(p1, temp);
-                        v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
-                        v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
-                        p1 = add_v2f(v2, p1);
-                        p2 = add_v2f(v2, p2);
-                        p3 = add_v2f(v2, p3);
-                        GLfloat arrow_vertices[3 * 3] = {
-                            p2.x, p2.y, 0.2,
-                            p1.x, p1.y, 0.2,
-                            p3.x, p3.y, 0.2,
-                        };
-                        glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-                        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
-                        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-                        glEnableVertexAttribArray(0);
-                        glDrawArrays(GL_TRIANGLES, 0, 3);
-                    }
+            // vertices children
+            for (int i = 0; i < global_state.num_circles; i++) {
+                for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                    v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
+                    v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
+                    draw_arrow(VBO2, &global_state, v1, v2, true);
                 }
             }
-        }
 
-        // arrow being currently created
-        if (global_state.modifying_vertex != -1) {
-            v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
-            v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
-            GLfloat line_vertices[3 * 2] = {
-                v1.x, v1.y, 0.2,
-                v2.x, v2.y, 0.2,
-            };
-            glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-            glEnableVertexAttribArray(0);
-            glDrawArrays(GL_LINES, 0, 2);
-
-            // draw arrow head
-            double r = 1.0f;
-            double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
-            if (magv2v1 > 0.001f) {
-                v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
-                v2f p1 = create_v2f(0, 0);
-                double magv1p1 = magnitude_v2f(sub_v2f(p1, v1));
-                if (magv1p1 >= r) {
-                    v2f temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT / global_state.zoom);
-                    v2f temp2 = scale_v2f(temp, -1);
-                    temp2 = add_v2f(scale_v2f(temp, 2), temp2);
-                    v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
-                    v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
-                    p1 = add_v2f(v2, p1);
-                    p2 = add_v2f(v2, p2);
-                    p3 = add_v2f(v2, p3);
-                    GLfloat arrow_vertices[3 * 3] = {
-                        p2.x, p2.y, 0.2,
-                        p1.x, p1.y, 0.2,
-                        p3.x, p3.y, 0.2,
-                    };
-                    glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-                    glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
-                    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-                    glEnableVertexAttribArray(0);
-                    glDrawArrays(GL_TRIANGLES, 0, 3);
-                }
+            // arrow being currently created
+            if (global_state.modifying_vertex != -1) {
+                v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
+                v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
+                draw_arrow(VBO2, &global_state, v1, v2, false);
             }
         }
 

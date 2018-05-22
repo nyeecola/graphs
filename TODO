@@ -1,16 +1,15 @@
 High priority:
-- Clean up drawing arrow head
+- Create BFS
 
-Normal priority:
+Regular priority:
 - Create documentation
 - Make it so that multiple vertices can be dragged at the same time 
 - Make it so that multiple vertices can be modified at the same time 
 - Zoom on mouse cursor
 - Create user interface (with drag and drop)
-- Create BFS
 - Create DFS
 - Add "flood" animation
-- Add animations (bipartido, flux)
+- Add vertex position animations (bipartido, flux)
 
 Low priority:
 - Render using instancing
