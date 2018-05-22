@@ -6,4 +6,4 @@
 
 #define MAX_VERTICES 100
 
-#define ARROW_HEAD_CONSTANT 0.3f
+#define ARROW_HEAD_CONSTANT 0.03f

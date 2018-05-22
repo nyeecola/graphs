@@ -47,9 +47,10 @@ NUMERIC_TYPE magnitude(TYPE_NAME)(TYPE_NAME v1) {
 }
 
 TYPE_NAME normalize(TYPE_NAME)(TYPE_NAME v1) {
-    double mag = magnitude_v2f(v1);
-    assert(mag > 0);
-    return scale(TYPE_NAME)(v1, 1/mag);
+    NUMERIC_TYPE mag = magnitude(TYPE_NAME)(v1);
+    assert(mag);
+    TYPE_NAME r = scale(TYPE_NAME)(v1, 1/mag);
+    return r;
 }
 
 #undef create

@@ -1,19 +1,16 @@
 High priority:
 - Clean up drawing arrow head
-- Make arrow head zoom independent
 
 Normal priority:
 - Create documentation
-- Make it possible for the user to add arrows with directions
 - Make it so that multiple vertices can be dragged at the same time 
 - Make it so that multiple vertices can be modified at the same time 
 - Zoom on mouse cursor
-- Hardware cursor
 - Create user interface (with drag and drop)
-- Figure out why MSAA is not working (test on windows)
 - Create BFS
 - Create DFS
 - Add "flood" animation
+- Add animations (bipartido, flux)
 
 Low priority:
 - Render using instancing

@@ -466,7 +466,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        glClearColor(0.95, 0.6, 0.3, 1);
+        glClearColor(1.00, 0.6, 0.2, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
@@ -522,7 +522,7 @@ int main(int argc, char **argv) {
                     v2f p1 = scale_v2f(v2v1, r);
                     double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
                     if (magv1p1 >= r) {
-                        v2f temp = scale_v2f(p1, (1 + ARROW_HEAD_CONSTANT));
+                        v2f temp = scale_v2f(p1, 1 + ARROW_HEAD_CONSTANT / global_state.zoom);
                         v2f temp2 = sub_v2f(p1, temp);
                         v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
                         v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
@@ -566,7 +566,7 @@ int main(int argc, char **argv) {
                 v2f p1 = create_v2f(0, 0);
                 double magv1p1 = magnitude_v2f(sub_v2f(p1, v1));
                 if (magv1p1 >= r) {
-                    v2f temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT);
+                    v2f temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT / global_state.zoom);
                     v2f temp2 = scale_v2f(temp, -1);
                     temp2 = add_v2f(scale_v2f(temp, 2), temp2);
                     v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
