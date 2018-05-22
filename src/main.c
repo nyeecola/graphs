@@ -530,18 +530,20 @@ int main(int argc, char **argv) {
         frame_translation.y = global_state.last_translation.y + global_state.cur_translation.y;
 
         // draw vertices
-        glBindVertexArray(VAO);
-        for (int i = 0; i < global_state.num_circles; i++) {
-            v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
-            glUniform3f(translation_uniform, v.x, v.y, 0.0f);
-            if (global_state.circles[i].selected) {
-                glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
-            } else {
-                glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
+        {
+            glBindVertexArray(VAO);
+            for (int i = 0; i < global_state.num_circles; i++) {
+                v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
+                glUniform3f(translation_uniform, v.x, v.y, 0.0f);
+                if (global_state.circles[i].selected) {
+                    glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
+                } else {
+                    glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
+                }
+                glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
             }
-            glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+            glBindVertexArray(0);
         }
-        glBindVertexArray(0);
 
         // draw arrows
         {
@@ -564,9 +566,8 @@ int main(int argc, char **argv) {
                 v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
                 draw_arrow(VBO2, &global_state, v1, v2, false);
             }
+            glBindVertexArray(0);
         }
-
-        glBindVertexArray(0);
 
         glfwSwapBuffers(window);
     }
