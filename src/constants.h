@@ -7,3 +7,10 @@
 #define MAX_VERTICES 100
 
 #define ARROW_HEAD_CONSTANT 0.03f
+
+#define BACKGROUND_COLOR 0.75f, 0.5f, 0.3f
+#define VERTEX_DEFAULT_COLOR 0.8f, 0.8f, 0.8f
+#define VERTEX_FILLED_COLOR 0.0f, 0.5f, 0.0f
+#define VERTEX_SELECTED_COLOR 0.4f, 0.62f, 0.85f
+#define ARROW_FILLED_COLOR 0.0f, 0.5f, 0.0f
+#define ARROW_DEFAULT_COLOR 0.0f, 0.0f, 0.0f

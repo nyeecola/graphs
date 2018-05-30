@@ -534,7 +534,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        glClearColor(0.75, 0.5, 0.3, 1);
+        glClearColor(BACKGROUND_COLOR, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
@@ -553,11 +553,11 @@ int main(int argc, char **argv) {
                 v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
                 if (global_state.circles[i].filled) {
-                    glUniform3f(color_uniform, 0.0f, 0.5f, 0.0f);
+                    glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
                 } else if (global_state.circles[i].selected) {
-                    glUniform3f(color_uniform, 0.4f, 0.62f, 0.85f);
+                    glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
                 } else {
-                    glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
+                    glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
             }
@@ -567,15 +567,15 @@ int main(int argc, char **argv) {
         // draw arrows
         {
             glBindVertexArray(VAO2);
-            glUniform3f(translation_uniform, 0, 0, 0.0f);
+            glUniform3f(translation_uniform, 0, 0, 0);
 
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
                 for (int j = 0; j < global_state.circles[i].num_children; j++) {
                     if (global_state.circles[i].filled) {
-                        glUniform3f(color_uniform, 0.0f, 0.5f, 0.0f);
+                        glUniform3f(color_uniform, ARROW_FILLED_COLOR);
                     } else {
-                        glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
+                        glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
                     }
                     v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
                     v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
@@ -583,7 +583,7 @@ int main(int argc, char **argv) {
                 }
             }
 
-            glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
+            glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
             // arrow being currently created
             if (global_state.modifying_vertex != -1) {
                 v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
