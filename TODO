@@ -1,5 +1,5 @@
 High priority:
-- Create BFS
+- Add "flood" animation
 
 Regular priority:
 - Create documentation
@@ -8,7 +8,6 @@ Regular priority:
 - Zoom on mouse cursor
 - Create user interface (with drag and drop)
 - Create DFS
-- Add "flood" animation
 - Add vertex position animations (bipartido, flux)
 
 Low priority:
