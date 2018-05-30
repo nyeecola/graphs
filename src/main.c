@@ -25,6 +25,8 @@ typedef struct {
     bool selected;
     int *children;
     int num_children;
+
+    bool filled;
 } vertex_t;
 
 typedef struct {
@@ -67,13 +69,28 @@ char *load_text_file_content(char *filename) {
 }
 
 void BFS(global_state_t *global_state, int root_index) {
+    for (int i = 0; i < global_state->num_circles; i++) {
+        global_state->circles[i].filled = false;
+    }
+
+    global_state->circles[root_index].filled = true;
+    int visited[MAX_VERTICES] = {0};
+
     int queue[MAX_VERTICES];
     int queue_start = 0;
     int queue_end = 0;
     queue[queue_end++] = root_index;
+    visited[root_index] = 1;
     while (queue_start < queue_end) {
         int node = queue[queue_start++];
-        // TODO
+
+        for (int i = 0; i < global_state->circles[node].num_children; i++) {
+            if (!visited[global_state->circles[node].children[i]]) {
+                queue[queue_end++] = global_state->circles[node].children[i];
+                visited[global_state->circles[node].children[i]] = 1;
+                global_state->circles[global_state->circles[node].children[i]].filled = true;
+            }
+        }
     }
 }
 
@@ -517,7 +534,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        glClearColor(1.00, 0.6, 0.2, 1);
+        glClearColor(0.75, 0.5, 0.3, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shader_program);
@@ -535,10 +552,12 @@ int main(int argc, char **argv) {
             for (int i = 0; i < global_state.num_circles; i++) {
                 v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
-                if (global_state.circles[i].selected) {
-                    glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
+                if (global_state.circles[i].filled) {
+                    glUniform3f(color_uniform, 0.0f, 0.5f, 0.0f);
+                } else if (global_state.circles[i].selected) {
+                    glUniform3f(color_uniform, 0.4f, 0.62f, 0.85f);
                 } else {
-                    glUniform3f(color_uniform, 1.0f, 1.0f, 1.0f);
+                    glUniform3f(color_uniform, 0.8f, 0.8f, 0.8f);
                 }
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
             }
@@ -549,17 +568,22 @@ int main(int argc, char **argv) {
         {
             glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0.0f);
-            glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
 
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
                 for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                    if (global_state.circles[i].filled) {
+                        glUniform3f(color_uniform, 0.0f, 0.5f, 0.0f);
+                    } else {
+                        glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
+                    }
                     v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
                     v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
                     draw_arrow(VBO2, &global_state, v1, v2, true);
                 }
             }
 
+            glUniform3f(color_uniform, 0.0f, 0.0f, 0.0f);
             // arrow being currently created
             if (global_state.modifying_vertex != -1) {
                 v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
