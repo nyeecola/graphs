@@ -1,5 +1,7 @@
 High priority:
 - Add "flood" animation
+- Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
+-- Make it possible to have two entrance points
 
 Regular priority:
 - Automatize build process, add grep for TODOs && DEBUGs
