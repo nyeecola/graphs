@@ -6,6 +6,8 @@
 #include <math.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
 #include "constants.h"
 
@@ -27,8 +29,9 @@ typedef struct {
     int num_children;
 
     int filled; // 0 means not found, 1 means filling, 2 means filled
-    int fill_entrance_index; // index of the "father"
-    float fill_radius;
+    int16_t fill_entrance_index[MAX_VERTEX_ENTRANCES]; // index of the "father"
+    float fill_radius[MAX_VERTEX_ENTRANCES];
+    int num_fill_entrances;
 } vertex_t;
 
 typedef struct {
@@ -42,6 +45,8 @@ typedef struct {
     v2f cur_translation;
     vertex_t *circles;
     int num_circles;
+
+    int current_animation_root; // index of the current animation root vertex
 } global_state_t;
 
 // kills game with an error message
@@ -70,14 +75,22 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
-void BFS(global_state_t *global_state, int root_index) {
+void clear_flood(global_state_t *global_state) {
+    vertex_t *circles = global_state->circles;
     for (int i = 0; i < global_state->num_circles; i++) {
-        global_state->circles[i].filled = 0;
-        global_state->circles[i].fill_radius = 0.0f;
+        circles[i].filled = 0;
+        circles[i].num_fill_entrances = 0;
+        memset(circles[i].fill_radius, 0, sizeof(circles[i].fill_radius));
     }
+}
 
-    global_state->circles[root_index].filled = 1;
-    global_state->circles[root_index].fill_entrance_index = root_index;
+void BFS(global_state_t *global_state, int root_index) {
+    clear_flood(global_state);
+    vertex_t *circles = global_state->circles;
+
+    circles[root_index].filled = 1;
+    circles[root_index].fill_entrance_index[circles[root_index].num_fill_entrances++] = root_index;
+    global_state->current_animation_root = root_index;
     int visited[MAX_VERTICES] = {0};
 
     int queue[MAX_VERTICES];
@@ -88,13 +101,22 @@ void BFS(global_state_t *global_state, int root_index) {
     while (queue_start < queue_end) {
         int node = queue[queue_start++];
 
-        for (int i = 0; i < global_state->circles[node].num_children; i++) {
-            if (!visited[global_state->circles[node].children[i]]) {
-                queue[queue_end++] = global_state->circles[node].children[i];
-                visited[global_state->circles[node].children[i]] = 1;
-                global_state->circles[global_state->circles[node].children[i]].filled = 1;
-                global_state->circles[global_state->circles[node].children[i]].fill_entrance_index = node;
-            }
+        // used for animation
+        if (visited[node] == 2) {
+            break;
+        }
+        visited[node] = 2;
+
+        for (int i = 0; i < circles[node].num_children; i++) {
+            int children_index = circles[node].children[i];
+            //if (!visited[children_index]) { // NOTE: disabled for animation
+                queue[queue_end++] = children_index;
+                if (!visited[children_index]) { // used for animation
+                    visited[children_index] = 1;
+                }
+                circles[children_index].filled = 1;
+                circles[children_index].fill_entrance_index[circles[children_index].num_fill_entrances++] = node;
+            //}
         }
     }
 }
@@ -129,6 +151,8 @@ void create_vertex(global_state_t *global_state, v2f p) {
 }
 
 void delete_vertex(global_state_t *global_state, int index) {
+    clear_flood(global_state);
+
     global_state->dragging_vertex = FALSE;
     for (int i = 0; i < global_state->num_circles; i++) {
         int removed_location = -1;
@@ -397,6 +421,8 @@ int main(int argc, char **argv) {
     printf("Major: %d\n", samples);
     glGetIntegerv(GL_MINOR_VERSION, &samples);
     printf("Minor: %d\n", samples);
+    glGetIntegerv(GL_MAX_UNIFORM_LOCATIONS, &samples);
+    printf("Max uniform locations: %d\n", samples);
 #endif
 
 
@@ -488,6 +514,7 @@ int main(int argc, char **argv) {
     GLint filled_uniform = glGetUniformLocation(shader_program, "filled");
     GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
     GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
+    GLint num_entrances_uniform = glGetUniformLocation(shader_program, "num_entrances");
 
 
     // initialize global state
@@ -556,39 +583,50 @@ int main(int argc, char **argv) {
 
         // draw vertices
         {
+            vertex_t *circles = global_state.circles;
             float fill_radius_step = 1.0f * global_state.delta_time;
 
             glBindVertexArray(VAO);
             for (int i = 0; i < global_state.num_circles; i++) {
-                v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
+                v2f v = add_v2f(frame_translation, circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
-                glUniform1i(filled_uniform, global_state.circles[i].filled);
-                if (global_state.circles[i].filled > 0) {
-                    if (i == global_state.circles[i].fill_entrance_index) {
-                        global_state.circles[i].fill_radius += fill_radius_step;
-                        if (global_state.circles[i].fill_radius > 1.0f /* radius */) {
-                            global_state.circles[i].filled = 2;
+                glUniform1i(filled_uniform, circles[i].filled);
+                //printf("num fill entrances %d\n", circles[i].num_fill_entrances);
+                glUniform1i(num_entrances_uniform, circles[i].num_fill_entrances);
+                if (circles[i].filled > 0) {
+                    if (global_state.current_animation_root == i) {
+                        circles[i].fill_radius[0] += fill_radius_step;
+                        if (circles[i].fill_radius[0] > 1.0f /* radius */) {
+                            circles[i].filled = 2;
                         }
-                        glUniform2f(fill_entrance_uniform, v.x, v.y);
+                        GLfloat t[2] = {v.x, v.y};
+                        glUniform2fv(fill_entrance_uniform, 1, t);
+                        glUniform1fv(fill_radius_uniform, 1, circles[i].fill_radius);
                     } else {
-                        vertex_t predecessor = global_state.circles[global_state.circles[i].fill_entrance_index];
-                        if (predecessor.filled == 2) {
-                            global_state.circles[i].fill_radius += fill_radius_step;
-                            if (global_state.circles[i].fill_radius > 2.0f /* radius * 2 */) {
-                                global_state.circles[i].filled = 2;
+                        GLfloat fill_entrances[MAX_VERTEX_ENTRANCES * 2] = {0};
+                        int aux_count = 0;
+                        for (int j = 0; j < circles[i].num_fill_entrances; j++) {
+                            vertex_t predecessor = circles[circles[i].fill_entrance_index[j]];
+                            if (predecessor.filled == 2) {
+                                circles[i].fill_radius[j] += fill_radius_step;
+                                if (circles[i].fill_radius[j] > 2.0f /* radius * 2 */) {
+                                    circles[i].filled = 2;
+                                }
                             }
+                            v2f fill_entrance = sub_v2f(circles[i].pos, predecessor.pos);
+                            fill_entrance = add_v2f(fill_entrance, scale_v2f(normalize_v2f(fill_entrance), -1.0f /*radius*/));
+                            fill_entrance = add_v2f(fill_entrance, predecessor.pos);
+                            fill_entrance = add_v2f(frame_translation, fill_entrance);
+                            fill_entrances[aux_count++] = fill_entrance.x;
+                            fill_entrances[aux_count++] = fill_entrance.y;
                         }
-                        v2f fill_entrance = sub_v2f(global_state.circles[i].pos, predecessor.pos);
-                        fill_entrance = add_v2f(fill_entrance, scale_v2f(normalize_v2f(fill_entrance), -1.0f /*radius*/));
-                        fill_entrance = add_v2f(fill_entrance, predecessor.pos);
-                        fill_entrance = add_v2f(frame_translation, fill_entrance);
-                        glUniform2f(fill_entrance_uniform, fill_entrance.x, fill_entrance.y);
+                        glUniform2fv(fill_entrance_uniform, circles[i].num_fill_entrances, fill_entrances);
+                        glUniform1fv(fill_radius_uniform, circles[i].num_fill_entrances, circles[i].fill_radius);
                     }
-                    glUniform1f(fill_radius_uniform, global_state.circles[i].fill_radius);
                 }
-                if (global_state.circles[i].filled) {
+                if (circles[i].filled) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
-                } else if (global_state.circles[i].selected) {
+                } else if (circles[i].selected) {
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);

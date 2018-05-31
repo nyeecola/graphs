@@ -1,7 +1,9 @@
 High priority:
-- Add "flood" animation
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
+-- Add colors properly (there are some artifacts since we are doing a stupid calculation o fragshader)
 -- Make it possible to have two entrance points
+-- Maybe improve animation performance by stopping unnecessary work once BFS is all done?
+-- Add forward and back buttons
 
 Regular priority:
 - Automatize build process, add grep for TODOs && DEBUGs
@@ -12,8 +14,10 @@ Regular priority:
 - Create user interface (with drag and drop)
 - Create DFS
 - Add vertex position animations (bipartido, flux)
+- Fix shader error log not working properly
 
 Low priority:
-- Render using instancing
+- Recheck constants
 - Remove MAX_VERTICES limit
+- Render using instancing
 - Add online mode
