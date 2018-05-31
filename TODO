@@ -1,6 +1,7 @@
 High priority:
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
 -- Add colors properly (there are some artifacts since we are doing a stupid calculation o fragshader)
+-- Add some kind of arrow animation
 -- Make it possible to have two entrance points
 -- Maybe improve animation performance by stopping unnecessary work once BFS is all done?
 -- Add forward and back buttons
