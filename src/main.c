@@ -73,6 +73,7 @@ char *load_text_file_content(char *filename) {
 void BFS(global_state_t *global_state, int root_index) {
     for (int i = 0; i < global_state->num_circles; i++) {
         global_state->circles[i].filled = false;
+        global_state->circles[i].fill_radius = 0.0f;
     }
 
     global_state->circles[root_index].filled = true;
@@ -557,12 +558,15 @@ int main(int argc, char **argv) {
 
         // draw vertices
         {
+            float fill_radius_step = 1.0f * global_state.delta_time;
+
             glBindVertexArray(VAO);
             for (int i = 0; i < global_state.num_circles; i++) {
                 v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
                 glUniform1i(filled_uniform, global_state.circles[i].filled);
                 if (global_state.circles[i].filled) {
+                    global_state.circles[i].fill_radius += fill_radius_step;
                     if (i == global_state.circles[i].fill_entrance_index) {
                         glUniform2f(fill_entrance_uniform, v.x, v.y);
                     } else {
