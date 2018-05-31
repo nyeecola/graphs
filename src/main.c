@@ -27,6 +27,8 @@ typedef struct {
     int num_children;
 
     bool filled;
+    int fill_entrance_index; // index of the "father"
+    float fill_radius;
 } vertex_t;
 
 typedef struct {
@@ -74,6 +76,8 @@ void BFS(global_state_t *global_state, int root_index) {
     }
 
     global_state->circles[root_index].filled = true;
+    global_state->circles[root_index].fill_entrance_index = root_index;
+    global_state->circles[root_index].fill_radius = 0.4f;
     int visited[MAX_VERTICES] = {0};
 
     int queue[MAX_VERTICES];
@@ -89,6 +93,8 @@ void BFS(global_state_t *global_state, int root_index) {
                 queue[queue_end++] = global_state->circles[node].children[i];
                 visited[global_state->circles[node].children[i]] = 1;
                 global_state->circles[global_state->circles[node].children[i]].filled = true;
+                global_state->circles[global_state->circles[node].children[i]].fill_entrance_index = node; // DEBUG
+                global_state->circles[global_state->circles[node].children[i]].fill_radius = 0.4f; // DEBUG 
             }
         }
     }
@@ -480,6 +486,9 @@ int main(int argc, char **argv) {
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
     GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
     GLint color_uniform = glGetUniformLocation(shader_program, "color");
+    GLint filled_uniform = glGetUniformLocation(shader_program, "filled");
+    GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
+    GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
 
 
     // initialize global state
@@ -506,8 +515,8 @@ int main(int argc, char **argv) {
 
     double last_time = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
-        //glfwPollEvents();
-        glfwWaitEvents();
+        glfwPollEvents();
+        //glfwWaitEvents();
 
         double current_time = glfwGetTime();
         global_state.delta_time = current_time - last_time;
@@ -552,6 +561,20 @@ int main(int argc, char **argv) {
             for (int i = 0; i < global_state.num_circles; i++) {
                 v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
+                glUniform1i(filled_uniform, global_state.circles[i].filled);
+                if (global_state.circles[i].filled) {
+                    if (i == global_state.circles[i].fill_entrance_index) {
+                        glUniform2f(fill_entrance_uniform, v.x, v.y);
+                    } else {
+                        vertex_t predecessor = global_state.circles[global_state.circles[i].fill_entrance_index];
+                        v2f fill_entrance = sub_v2f(global_state.circles[i].pos, predecessor.pos);
+                        fill_entrance = add_v2f(fill_entrance, scale_v2f(normalize_v2f(fill_entrance), -1.0f /*radius*/));
+                        fill_entrance = add_v2f(fill_entrance, predecessor.pos);
+                        fill_entrance = add_v2f(frame_translation, fill_entrance);
+                        glUniform2f(fill_entrance_uniform, fill_entrance.x, fill_entrance.y);
+                    }
+                    glUniform1f(fill_radius_uniform, global_state.circles[i].fill_radius);
+                }
                 if (global_state.circles[i].filled) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
                 } else if (global_state.circles[i].selected) {
@@ -568,6 +591,10 @@ int main(int argc, char **argv) {
         {
             glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0);
+            // TODO: think about this
+            glUniform1i(filled_uniform, 0);
+            glUniform2f(fill_entrance_uniform, 0, 0);
+            glUniform1f(fill_radius_uniform, 0);
 
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
