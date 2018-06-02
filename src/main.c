@@ -436,8 +436,8 @@ int main(int argc, char **argv) {
 
     // shader initialization
 
-    char *vertex_file_name = "src/vertexshader.glsl";
-    char *frag_file_name = "src/fragshader.glsl";
+    char *vertex_file_name = "vertexshader.glsl";
+    char *frag_file_name = "fragshader.glsl";
 
     const char *vertex_shader_content = load_text_file_content(vertex_file_name);
     const char *frag_shader_content = load_text_file_content(frag_file_name);
