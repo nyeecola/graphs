@@ -153,6 +153,8 @@ void create_vertex(global_state_t *global_state, v2f p) {
     v.selected = FALSE;
     v.children = malloc(MAX_VERTICES * sizeof(*v.children));
     v.num_children = 0;
+    v.filled = 0;
+    v.num_fill_entrances = 0;
     global_state->circles[global_state->num_circles++] = v;
 }
 
