@@ -9,6 +9,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef _WIN32
+    #undef max
+    #undef min
+    #define M_PI 3.14159f
+#endif
+
 #include "constants.h"
 
 #define TRUE 1
