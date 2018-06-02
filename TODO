@@ -1,5 +1,4 @@
 High priority:
-- DEBUG BFS, not working properly
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
 -- Add colors properly (there are some artifacts since we are doing a stupid calculation o fragshader)
 -- Add some kind of arrow animation

@@ -115,14 +115,27 @@ void BFS(global_state_t *global_state, int root_index) {
 
         for (int i = 0; i < circles[node].num_children; i++) {
             int children_index = circles[node].children[i];
-            //if (!visited[children_index]) { // NOTE: disabled for animation
+#if 1
+            // multi_entrance animation enabled
+
+            if (!visited[children_index]) { // used for animation
                 queue[queue_end++] = children_index;
-                if (!visited[children_index]) { // used for animation
-                    visited[children_index] = 1;
-                }
+                visited[children_index] = 1;
+            }
+            if (visited[children_index] != 2) {
                 circles[children_index].filled = 1;
                 circles[children_index].fill_entrance_index[circles[children_index].num_fill_entrances++] = node;
-            //}
+            }
+#else
+            // multi_entrance animation disabled
+
+            if (!visited[children_index]) { // NOTE: disabled for animation
+                queue[queue_end++] = children_index;
+                visited[children_index] = 1;
+                circles[children_index].filled = 1;
+                circles[children_index].fill_entrance_index[circles[children_index].num_fill_entrances++] = node;
+            }
+#endif
         }
     }
 }
