@@ -616,7 +616,7 @@ int main(int argc, char **argv) {
                 glUniform1i(num_entrances_uniform, circles[i].num_fill_entrances);
                 if (circles[i].filled > 0) {
                     if (global_state.current_animation_root == i) {
-                        circles[i].fill_radius[0] += fill_radius_step;
+                        circles[i].fill_radius[0] = min(circles[i].fill_radius[0] + fill_radius_step, 1.1f /* radius */);
                         if (circles[i].fill_radius[0] > 1.0f /* radius */) {
                             circles[i].filled = 2;
                         }
@@ -629,7 +629,7 @@ int main(int argc, char **argv) {
                         for (int j = 0; j < circles[i].num_fill_entrances; j++) {
                             vertex_t predecessor = circles[circles[i].fill_entrance_index[j]];
                             if (predecessor.filled == 2) {
-                                circles[i].fill_radius[j] += fill_radius_step;
+                                circles[i].fill_radius[j] = min(circles[i].fill_radius[j] + fill_radius_step, 2.1f /* radius */);
                                 if (circles[i].fill_radius[j] > 2.0f /* radius * 2 */) {
                                     circles[i].filled = 2;
                                 }
