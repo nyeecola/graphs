@@ -67,6 +67,7 @@ void force_quit(const char *str) {
 // reads a text file and puts it inside a variable (this function allocates the buffer)
 char *load_text_file_content(char *filename) {
     FILE *f = fopen(filename, "r");
+    assert(f);
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
     rewind(f);
