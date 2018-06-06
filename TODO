@@ -2,6 +2,7 @@ High priority:
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
 -- Add some kind of arrow animation
 -- Add forward and back buttons
+- Finish and clean up font system
 
 Regular priority:
 - Automatize build process, add grep for TODOs && DEBUGs

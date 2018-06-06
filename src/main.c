@@ -15,6 +15,7 @@
     #define M_PI 3.14159f
 #endif
 
+#include "font.h"
 #include "constants.h"
 
 #define TRUE 1
@@ -79,6 +80,97 @@ char *load_text_file_content(char *filename) {
     *aux = 0;
     fclose(f);
     return buffer;
+}
+
+GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
+    const char *vertex_shader_content = load_text_file_content(vertex_file_name);
+    const char *frag_shader_content = load_text_file_content(frag_file_name);
+
+    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
+
+    glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
+    glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
+
+    GLint shader_compiled;
+    glCompileShader(vertex_shader);
+    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_compiled);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(vertex_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Vertex shader failed to compile\n%s\n", message);
+        force_quit(output);
+    }
+    glCompileShader(frag_shader);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(frag_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Fragment shader failed to compile\n%s\n", message);
+        force_quit(output);
+    }
+
+    GLuint shader_program = glCreateProgram();
+
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, frag_shader);
+
+    glLinkProgram(shader_program);
+    GLint program_linked;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &program_linked);
+    if (program_linked != GL_TRUE) {
+        GLchar message[1000];
+        glGetProgramInfoLog(program_linked, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Program failed to link\n%s\n", message);
+        force_quit(output);
+    }
+
+    return shader_program;
+}
+
+void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text) {
+    glBindVertexArray(vao);
+    // assuming orthographic projection with units = screen pixels, origin at top left
+    glEnable(GL_TEXTURE_2D);
+    glUseProgram(font_shader_program);
+    glUniform1i(glGetUniformLocation(font_shader_program, "tex"), 0);
+    glUniform1f(glGetUniformLocation(font_shader_program, "lesser_window_side_size"), min(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT));
+    glUniform3f(glGetUniformLocation(font_shader_program, "color"), 0.0f, 0.0f, 0.0f);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    while (*text) {
+        if (*text >= 32 && *text < 128) {
+            stbtt_aligned_quad q;
+            stbtt_GetBakedQuad(cdata, 512, 512, *text-32, &x, &y, &q, 1);
+
+            float buffer[6 * 5] = {
+                q.x0, q.y0, 0, q.s0, q.t1,
+                q.x1, q.y0, 0, q.s1, q.t1,
+                q.x0, q.y1, 0, q.s0, q.t0,
+                q.x1, q.y0, 0, q.s1, q.t1,
+                q.x1, q.y1, 0, q.s1, q.t0,
+                q.x0, q.y1, 0, q.s0, q.t0
+            };
+
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, ftex);
+
+            // TODO: set up VAO
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), buffer, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) (3 * sizeof(GLfloat)));
+            glEnableVertexAttribArray(1);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        text++;
+    }
 }
 
 void clear_flood(global_state_t *global_state) {
@@ -449,53 +541,8 @@ int main(int argc, char **argv) {
 
     // shader initialization
 
-    char *vertex_file_name = "vertexshader.glsl";
-    char *frag_file_name = "fragshader.glsl";
-
-    const char *vertex_shader_content = load_text_file_content(vertex_file_name);
-    const char *frag_shader_content = load_text_file_content(frag_file_name);
-
-    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
-    glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
-
-    GLint shader_compiled;
-    glCompileShader(vertex_shader);
-    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_compiled);
-    if (shader_compiled != GL_TRUE) {
-        GLchar message[1000];
-        glGetShaderInfoLog(vertex_shader, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Vertex shader failed to compile\n%s\n", message);
-        force_quit(output);
-    }
-    glCompileShader(frag_shader);
-    if (shader_compiled != GL_TRUE) {
-        GLchar message[1000];
-        glGetShaderInfoLog(frag_shader, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Fragment shader failed to compile\n%s\n", message);
-        force_quit(output);
-    }
-
-    GLuint shader_program = glCreateProgram();
-
-    glAttachShader(shader_program, vertex_shader);
-    glAttachShader(shader_program, frag_shader);
-
-    glLinkProgram(shader_program);
-    GLint program_linked;
-    glGetProgramiv(shader_program, GL_LINK_STATUS, &program_linked);
-    if (program_linked != GL_TRUE) {
-        GLchar message[1000];
-        glGetProgramInfoLog(program_linked, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Program failed to link\n%s\n", message);
-        force_quit(output);
-    }
-
+    GLuint shader_program = initialize_shader("vertexshader.glsl", "fragshader.glsl");
+    GLuint font_shader_program = initialize_shader("font_vertexshader.glsl", "font_fragshader.glsl");
 
     // buffers initialization
 
@@ -508,6 +555,11 @@ int main(int argc, char **argv) {
     GLuint VBO2, VAO2;
     glGenBuffers(1, &VBO2);
     glGenVertexArrays(1, &VAO2);
+
+    // font buffers
+    GLuint VBO3, VAO3;
+    glGenBuffers(1, &VBO3);
+    glGenVertexArrays(1, &VAO3);
     
     // initialize program data
 
@@ -526,7 +578,7 @@ int main(int argc, char **argv) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
     glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
+    //glBindVertexArray(0); // TODO: uncomment this
 
     GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
@@ -536,6 +588,7 @@ int main(int argc, char **argv) {
     GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
     GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
     GLint num_entrances_uniform = glGetUniformLocation(shader_program, "num_entrances");
+    GLint font_tex_uniform = glGetUniformLocation(font_shader_program, "tex");
 
 
     // initialize global state
@@ -560,11 +613,36 @@ int main(int argc, char **argv) {
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
+
+    // initialize font data
+#if 1
+    stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
+    GLuint ftex;
+    glGenTextures(1, &ftex);
+    {
+        unsigned char *ttf_buffer = malloc((1<<20) * sizeof(*ttf_buffer));
+        unsigned char temp_bitmap[512*521];
+        fread(ttf_buffer, 1, 1<<20, fopen("c:/windows/fonts/arial.ttf", "rb"));
+        stbtt_BakeFontBitmap(ttf_buffer, 0, 32.0f, temp_bitmap, 512, 512, 32, 96, cdata);
+        free(ttf_buffer);
+        glBindTexture(GL_TEXTURE_2D, ftex);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 512, 512, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+#else
+    stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
+    GLuint ftex;
+    glGenTextures(1, &ftex);
+#endif
+
     double last_time = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         //glfwWaitEvents();
 
+#if 0
         double current_time = glfwGetTime();
         global_state.delta_time = current_time - last_time;
         last_time = current_time;
@@ -589,10 +667,12 @@ int main(int argc, char **argv) {
                 }
             }
         }
+#endif
 
         glClearColor(BACKGROUND_COLOR, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+#if 0
         glUseProgram(shader_program);
         glUniform1f(scale_uniform, global_state.zoom);
         glUniform1f(aspect_ratio_uniform, ASPECT_RATIO);
@@ -689,6 +769,10 @@ int main(int argc, char **argv) {
             }
             glBindVertexArray(0);
         }
+#endif
+
+        glBindVertexArray(VAO2); // TODO: remove this
+        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO PRINT!");
 
         glfwSwapBuffers(window);
     }
