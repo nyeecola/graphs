@@ -15,3 +15,5 @@
 #define VERTEX_SELECTED_COLOR 0.4f, 0.62f, 0.85f
 #define ARROW_FILLED_COLOR 0.0f, 0.5f, 0.0f
 #define ARROW_DEFAULT_COLOR 0.0f, 0.0f, 0.0f
+
+#define FONT_SIZE 20

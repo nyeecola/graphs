@@ -132,12 +132,17 @@ GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
 }
 
 void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text) {
+    x -= DEFAULT_SCREEN_WIDTH / 2;
+    y = DEFAULT_SCREEN_HEIGHT / 2 - y;
+
+    // TODO: clean all of this up
     glBindVertexArray(vao);
     // assuming orthographic projection with units = screen pixels, origin at top left
     glEnable(GL_TEXTURE_2D);
     glUseProgram(font_shader_program);
     glUniform1i(glGetUniformLocation(font_shader_program, "tex"), 0);
-    glUniform1f(glGetUniformLocation(font_shader_program, "lesser_window_side_size"), min(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT));
+    glUniform1f(glGetUniformLocation(font_shader_program, "window_width"), DEFAULT_SCREEN_WIDTH);
+    glUniform1f(glGetUniformLocation(font_shader_program, "window_height"), DEFAULT_SCREEN_HEIGHT);
     glUniform3f(glGetUniformLocation(font_shader_program, "color"), 0.0f, 0.0f, 0.0f);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glEnable(GL_BLEND);
@@ -148,19 +153,17 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
             stbtt_GetBakedQuad(cdata, 512, 512, *text-32, &x, &y, &q, 1);
 
             float buffer[6 * 5] = {
-                q.x0, q.y0, 0, q.s0, q.t1,
-                q.x1, q.y0, 0, q.s1, q.t1,
-                q.x0, q.y1, 0, q.s0, q.t0,
-                q.x1, q.y0, 0, q.s1, q.t1,
-                q.x1, q.y1, 0, q.s1, q.t0,
-                q.x0, q.y1, 0, q.s0, q.t0
+                q.x0, q.y0, -0.4, q.s0, q.t1,
+                q.x1, q.y0, -0.4, q.s1, q.t1,
+                q.x0, q.y1, -0.4, q.s0, q.t0,
+                q.x1, q.y0, -0.4, q.s1, q.t1,
+                q.x1, q.y1, -0.4, q.s1, q.t0,
+                q.x0, q.y1, -0.4, q.s0, q.t0
             };
-
 
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, ftex);
 
-            // TODO: set up VAO
             glBindBuffer(GL_ARRAY_BUFFER, vbo);
             glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), buffer, GL_STATIC_DRAW);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) 0);
@@ -172,6 +175,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
         }
         text++;
     }
+    glBindVertexArray(0);
 }
 
 void clear_flood(global_state_t *global_state) {
@@ -608,15 +612,14 @@ int main(int argc, char **argv) {
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
     global_state.num_circles = 0;
     // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, create_v2f(-0.5, -0.4));
-    create_vertex(&global_state, create_v2f(2.2, 0.7));
+    create_vertex(&global_state, create_v2f(2.2, 1.1));
     create_vertex(&global_state, create_v2f(-1.4, 2.1));
+    create_vertex(&global_state, create_v2f(0.0, 0.0));
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
 
     // initialize font data
-#if 1
     stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
     GLuint ftex;
     glGenTextures(1, &ftex);
@@ -624,7 +627,7 @@ int main(int argc, char **argv) {
         unsigned char *ttf_buffer = malloc((1<<20) * sizeof(*ttf_buffer));
         unsigned char temp_bitmap[512*521];
         fread(ttf_buffer, 1, 1<<20, fopen("c:/windows/fonts/arial.ttf", "rb"));
-        stbtt_BakeFontBitmap(ttf_buffer, 0, 32.0f, temp_bitmap, 512, 512, 32, 96, cdata);
+        stbtt_BakeFontBitmap(ttf_buffer, 0, FONT_SIZE, temp_bitmap, 512, 512, 32, 96, cdata);
         free(ttf_buffer);
         glBindTexture(GL_TEXTURE_2D, ftex);
         //glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 512, 512, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
@@ -632,18 +635,12 @@ int main(int argc, char **argv) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glGenerateMipmap(GL_TEXTURE_2D);
     }
-#else
-    stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
-    GLuint ftex;
-    glGenTextures(1, &ftex);
-#endif
 
     double last_time = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         //glfwWaitEvents();
 
-#if 0
         double current_time = glfwGetTime();
         global_state.delta_time = current_time - last_time;
         last_time = current_time;
@@ -668,12 +665,10 @@ int main(int argc, char **argv) {
                 }
             }
         }
-#endif
 
         glClearColor(BACKGROUND_COLOR, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-#if 0
         glUseProgram(shader_program);
         glUniform1f(scale_uniform, global_state.zoom);
         glUniform1f(aspect_ratio_uniform, ASPECT_RATIO);
@@ -688,8 +683,9 @@ int main(int argc, char **argv) {
             vertex_t *circles = global_state.circles;
             float fill_radius_step = 1.0f * global_state.delta_time;
 
-            glBindVertexArray(VAO);
             for (int i = 0; i < global_state.num_circles; i++) {
+                glUseProgram(shader_program);
+                glBindVertexArray(VAO);
                 v2f v = add_v2f(frame_translation, circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
                 glUniform1i(filled_uniform, circles[i].filled);
@@ -734,12 +730,22 @@ int main(int argc, char **argv) {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+                glBindVertexArray(0);
+
+                // TODO: render all text after all vertexes, or find other way to fix blending
+                char str[2] = "2";
+                v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+                v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+                stbtt_bakedchar baked_char = cdata[str[0] - 32]; // TODO: remove this magic number
+                v.x -= baked_char.xadvance / 2;
+                v.y += baked_char.yoff / 2;
+                font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
             }
-            glBindVertexArray(0);
         }
 
         // draw arrows
         {
+            glUseProgram(shader_program);
             glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0);
             // TODO: think about this
@@ -770,9 +776,7 @@ int main(int argc, char **argv) {
             }
             glBindVertexArray(0);
         }
-#endif
 
-        glBindVertexArray(VAO2); // TODO: remove this
         font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO PRINT!");
 
         glfwSwapBuffers(window);
