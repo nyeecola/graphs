@@ -6,7 +6,16 @@
 #include <math.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
+#ifdef _WIN32
+    #undef max
+    #undef min
+    #define M_PI 3.14159f
+#endif
+
+#include "font.h"
 #include "constants.h"
 
 #define TRUE 1
@@ -21,12 +30,16 @@
 #undef TYPE_NAME
 
 typedef struct {
+    int weight;
     v2f pos;
     bool selected;
     int *children;
     int num_children;
 
-    bool filled;
+    int filled; // 0 means not found, 1 means filling, 2 means filled
+    int16_t fill_entrance_index[MAX_VERTEX_ENTRANCES]; // index of the "father"
+    float fill_radius[MAX_VERTEX_ENTRANCES];
+    int num_fill_entrances;
 } vertex_t;
 
 typedef struct {
@@ -40,6 +53,10 @@ typedef struct {
     v2f cur_translation;
     vertex_t *circles;
     int num_circles;
+    int editing_circle; // NOTE: -1 means no vertex is currently being edited (weight)
+    char temp_weight_str[10];
+
+    int current_animation_root; // index of the current animation root vertex
 } global_state_t;
 
 // kills game with an error message
@@ -53,6 +70,7 @@ void force_quit(const char *str) {
 // reads a text file and puts it inside a variable (this function allocates the buffer)
 char *load_text_file_content(char *filename) {
     FILE *f = fopen(filename, "r");
+    assert(f);
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
     rewind(f);
@@ -68,12 +86,117 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
-void BFS(global_state_t *global_state, int root_index) {
-    for (int i = 0; i < global_state->num_circles; i++) {
-        global_state->circles[i].filled = false;
+GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
+    const char *vertex_shader_content = load_text_file_content(vertex_file_name);
+    const char *frag_shader_content = load_text_file_content(frag_file_name);
+
+    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
+
+    glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
+    glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
+
+    GLint shader_compiled;
+    glCompileShader(vertex_shader);
+    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_compiled);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(vertex_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Vertex shader failed to compile\n%s\n", message);
+        force_quit(output);
+    }
+    glCompileShader(frag_shader);
+    if (shader_compiled != GL_TRUE) {
+        GLchar message[1000];
+        glGetShaderInfoLog(frag_shader, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Fragment shader failed to compile\n%s\n", message);
+        force_quit(output);
     }
 
-    global_state->circles[root_index].filled = true;
+    GLuint shader_program = glCreateProgram();
+
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, frag_shader);
+
+    glLinkProgram(shader_program);
+    GLint program_linked;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &program_linked);
+    if (program_linked != GL_TRUE) {
+        GLchar message[1000];
+        glGetProgramInfoLog(program_linked, 999, NULL, message);
+        char output[1200];
+        sprintf(output, "Program failed to link\n%s\n", message);
+        force_quit(output);
+    }
+
+    return shader_program;
+}
+
+void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text) {
+    x -= DEFAULT_SCREEN_WIDTH / 2;
+    y = DEFAULT_SCREEN_HEIGHT / 2 - y;
+
+    // TODO: clean all of this up
+    glBindVertexArray(vao);
+    // assuming orthographic projection with units = screen pixels, origin at top left
+    glEnable(GL_TEXTURE_2D);
+    glUseProgram(font_shader_program);
+    glUniform1i(glGetUniformLocation(font_shader_program, "tex"), 0);
+    glUniform1f(glGetUniformLocation(font_shader_program, "window_width"), DEFAULT_SCREEN_WIDTH);
+    glUniform1f(glGetUniformLocation(font_shader_program, "window_height"), DEFAULT_SCREEN_HEIGHT);
+    glUniform3f(glGetUniformLocation(font_shader_program, "color"), 0.0f, 0.0f, 0.0f);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    while (*text) {
+        if (*text >= 32 && *text < 128) {
+            stbtt_aligned_quad q;
+            stbtt_GetBakedQuad(cdata, 512, 512, *text-32, &x, &y, &q, 1);
+
+            float buffer[6 * 5] = {
+                q.x0, q.y0, -0.4, q.s0, q.t1,
+                q.x1, q.y0, -0.4, q.s1, q.t1,
+                q.x0, q.y1, -0.4, q.s0, q.t0,
+                q.x1, q.y0, -0.4, q.s1, q.t1,
+                q.x1, q.y1, -0.4, q.s1, q.t0,
+                q.x0, q.y1, -0.4, q.s0, q.t0
+            };
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, ftex);
+
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), buffer, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) 0);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) (3 * sizeof(GLfloat)));
+            glEnableVertexAttribArray(1);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        text++;
+    }
+    glBindVertexArray(0);
+}
+
+void clear_flood(global_state_t *global_state) {
+    vertex_t *circles = global_state->circles;
+    for (int i = 0; i < global_state->num_circles; i++) {
+        circles[i].filled = 0;
+        circles[i].num_fill_entrances = 0;
+        memset(circles[i].fill_radius, 0, sizeof(circles[i].fill_radius));
+    }
+}
+
+void BFS(global_state_t *global_state, int root_index) {
+    clear_flood(global_state);
+    vertex_t *circles = global_state->circles;
+
+    circles[root_index].filled = 1;
+    circles[root_index].fill_entrance_index[circles[root_index].num_fill_entrances++] = root_index;
+    global_state->current_animation_root = root_index;
     int visited[MAX_VERTICES] = {0};
 
     int queue[MAX_VERTICES];
@@ -84,12 +207,35 @@ void BFS(global_state_t *global_state, int root_index) {
     while (queue_start < queue_end) {
         int node = queue[queue_start++];
 
-        for (int i = 0; i < global_state->circles[node].num_children; i++) {
-            if (!visited[global_state->circles[node].children[i]]) {
-                queue[queue_end++] = global_state->circles[node].children[i];
-                visited[global_state->circles[node].children[i]] = 1;
-                global_state->circles[global_state->circles[node].children[i]].filled = true;
+        // used for animation
+        if (visited[node] == 2) {
+            break;
+        }
+        visited[node] = 2;
+
+        for (int i = 0; i < circles[node].num_children; i++) {
+            int children_index = circles[node].children[i];
+#if 1
+            // multi_entrance animation enabled
+
+            if (!visited[children_index]) { // used for animation
+                queue[queue_end++] = children_index;
+                visited[children_index] = 1;
             }
+            if (visited[children_index] != 2) {
+                circles[children_index].filled = 1;
+                circles[children_index].fill_entrance_index[circles[children_index].num_fill_entrances++] = node;
+            }
+#else
+            // multi_entrance animation disabled
+
+            if (!visited[children_index]) { // NOTE: disabled for animation
+                queue[queue_end++] = children_index;
+                visited[children_index] = 1;
+                circles[children_index].filled = 1;
+                circles[children_index].fill_entrance_index[circles[children_index].num_fill_entrances++] = node;
+            }
+#endif
         }
     }
 }
@@ -114,16 +260,21 @@ v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
     return r;
 }
 
-void create_vertex(global_state_t *global_state, v2f p) {
+void create_vertex(global_state_t *global_state, v2f p, int weight) {
     vertex_t v;
+    v.weight = weight;
     v.pos = p;
     v.selected = FALSE;
     v.children = malloc(MAX_VERTICES * sizeof(*v.children));
     v.num_children = 0;
+    v.filled = 0;
+    v.num_fill_entrances = 0;
     global_state->circles[global_state->num_circles++] = v;
 }
 
 void delete_vertex(global_state_t *global_state, int index) {
+    clear_flood(global_state);
+
     global_state->dragging_vertex = FALSE;
     for (int i = 0; i < global_state->num_circles; i++) {
         int removed_location = -1;
@@ -148,6 +299,7 @@ void delete_vertex(global_state_t *global_state, int index) {
         global_state->circles[i-1] = global_state->circles[i];
     }
     global_state->num_circles--;
+    global_state->editing_circle = -1;
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -160,7 +312,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        create_vertex(global_state, cursor_pos);
+        create_vertex(global_state, cursor_pos, 1);
     }
 
     // delete vertex when D is pressed
@@ -175,8 +327,46 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
     }
 
-    // run BFS when 1 is pressed
-    if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+    // handle changing vertex weight when X is pressed (NOTE: user must press ENTER to finalize or ESC to cancel)
+    {
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) {
+            for (int i = 0; i < global_state->num_circles; i++) {
+                v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
+                double r = 1.0f;
+                if (p.x * p.x + p.y * p.y <= r * r) {
+                    global_state->editing_circle = i;
+                    global_state->temp_weight_str[0] = 0;
+                    break;
+                }
+            }
+        }
+        if (global_state->editing_circle != -1 && action == GLFW_PRESS) {
+            if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) {
+                if (strlen(global_state->temp_weight_str) != 10) {
+                    assert(strlen(global_state->temp_weight_str) < 10);
+                    char temp_str[2] = "";
+                    temp_str[0] = '0' + key - GLFW_KEY_0;
+                    strcat(global_state->temp_weight_str, temp_str);
+                    global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                }
+            }
+            if (key == GLFW_KEY_BACKSPACE) {
+                int len = strlen(global_state->temp_weight_str);
+                if (len > 0) {
+                    global_state->temp_weight_str[len-1] = 0;
+                } else {
+                    strcpy(global_state->temp_weight_str, "0");
+                }
+                global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+            }
+            if (key == GLFW_KEY_ENTER || key == GLFW_KEY_ESCAPE) {
+                global_state->editing_circle = -1;
+            }
+        }
+    }
+
+    // run BFS when B is pressed
+    if (key == GLFW_KEY_B && action == GLFW_PRESS) {
         for (int i = 0; i < global_state->num_circles; i++) {
             v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
             double r = 1.0f;
@@ -392,58 +582,15 @@ int main(int argc, char **argv) {
     printf("Major: %d\n", samples);
     glGetIntegerv(GL_MINOR_VERSION, &samples);
     printf("Minor: %d\n", samples);
+    glGetIntegerv(GL_MAX_UNIFORM_LOCATIONS, &samples);
+    printf("Max uniform locations: %d\n", samples);
 #endif
 
 
     // shader initialization
 
-    char *vertex_file_name = "src/vertexshader.glsl";
-    char *frag_file_name = "src/fragshader.glsl";
-
-    const char *vertex_shader_content = load_text_file_content(vertex_file_name);
-    const char *frag_shader_content = load_text_file_content(frag_file_name);
-
-    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(vertex_shader, 1, &vertex_shader_content, NULL);
-    glShaderSource(frag_shader, 1, &frag_shader_content, NULL);
-
-    GLint shader_compiled;
-    glCompileShader(vertex_shader);
-    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_compiled);
-    if (shader_compiled != GL_TRUE) {
-        GLchar message[1000];
-        glGetShaderInfoLog(vertex_shader, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Vertex shader failed to compile\n%s\n", message);
-        force_quit(output);
-    }
-    glCompileShader(frag_shader);
-    if (shader_compiled != GL_TRUE) {
-        GLchar message[1000];
-        glGetShaderInfoLog(frag_shader, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Fragment shader failed to compile\n%s\n", message);
-        force_quit(output);
-    }
-
-    GLuint shader_program = glCreateProgram();
-
-    glAttachShader(shader_program, vertex_shader);
-    glAttachShader(shader_program, frag_shader);
-
-    glLinkProgram(shader_program);
-    GLint program_linked;
-    glGetProgramiv(shader_program, GL_LINK_STATUS, &program_linked);
-    if (program_linked != GL_TRUE) {
-        GLchar message[1000];
-        glGetProgramInfoLog(program_linked, 999, NULL, message);
-        char output[1200];
-        sprintf(output, "Program failed to link\n%s\n", message);
-        force_quit(output);
-    }
-
+    GLuint shader_program = initialize_shader("vertexshader.glsl", "fragshader.glsl");
+    GLuint font_shader_program = initialize_shader("font_vertexshader.glsl", "font_fragshader.glsl");
 
     // buffers initialization
 
@@ -456,6 +603,11 @@ int main(int argc, char **argv) {
     GLuint VBO2, VAO2;
     glGenBuffers(1, &VBO2);
     glGenVertexArrays(1, &VAO2);
+
+    // font buffers
+    GLuint VBO3, VAO3;
+    glGenBuffers(1, &VBO3);
+    glGenVertexArrays(1, &VAO3);
     
     // initialize program data
 
@@ -474,12 +626,17 @@ int main(int argc, char **argv) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
     glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
+    //glBindVertexArray(0); // TODO: uncomment this
 
     GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
     GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
     GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
     GLint color_uniform = glGetUniformLocation(shader_program, "color");
+    GLint filled_uniform = glGetUniformLocation(shader_program, "filled");
+    GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
+    GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
+    GLint num_entrances_uniform = glGetUniformLocation(shader_program, "num_entrances");
+    GLint font_tex_uniform = glGetUniformLocation(font_shader_program, "tex");
 
 
     // initialize global state
@@ -497,17 +654,37 @@ int main(int argc, char **argv) {
     global_state.cur_translation.y = 0;
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
     global_state.num_circles = 0;
-    // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, create_v2f(-0.5, -0.4));
-    create_vertex(&global_state, create_v2f(2.2, 0.7));
-    create_vertex(&global_state, create_v2f(-1.4, 2.1));
+    global_state.editing_circle = -1;
+    //global_state.temp_weight_str; // NOTE: no need to initialize this
+    // DEBUG: add some circles just for testing purposes
+    create_vertex(&global_state, create_v2f(2.2, 1.1), 1);
+    create_vertex(&global_state, create_v2f(-1.4, 2.1), 1);
+    create_vertex(&global_state, create_v2f(0.0, 0.0), 1);
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
+
+    // initialize font data
+    stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
+    GLuint ftex;
+    glGenTextures(1, &ftex);
+    {
+        unsigned char *ttf_buffer = malloc((1<<20) * sizeof(*ttf_buffer));
+        unsigned char temp_bitmap[512*521];
+        fread(ttf_buffer, 1, 1<<20, fopen("c:/windows/fonts/arial.ttf", "rb"));
+        stbtt_BakeFontBitmap(ttf_buffer, 0, FONT_SIZE, temp_bitmap, 512, 512, 32, 96, cdata);
+        free(ttf_buffer);
+        glBindTexture(GL_TEXTURE_2D, ftex);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 512, 512, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
     double last_time = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
-        //glfwPollEvents();
-        glfwWaitEvents();
+        glfwPollEvents();
+        //glfwWaitEvents();
 
         double current_time = glfwGetTime();
         global_state.delta_time = current_time - last_time;
@@ -548,26 +725,89 @@ int main(int argc, char **argv) {
 
         // draw vertices
         {
-            glBindVertexArray(VAO);
+            vertex_t *circles = global_state.circles;
+            float fill_radius_step = 1.0f * global_state.delta_time;
+
             for (int i = 0; i < global_state.num_circles; i++) {
-                v2f v = add_v2f(frame_translation, global_state.circles[i].pos);
+                glUseProgram(shader_program);
+                glBindVertexArray(VAO);
+                v2f v = add_v2f(frame_translation, circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
-                if (global_state.circles[i].filled) {
+                glUniform1i(filled_uniform, circles[i].filled);
+                //printf("num fill entrances %d\n", circles[i].num_fill_entrances);
+                glUniform1i(num_entrances_uniform, circles[i].num_fill_entrances);
+                if (circles[i].filled > 0) {
+                    if (global_state.current_animation_root == i) {
+                        circles[i].fill_radius[0] = min(circles[i].fill_radius[0] + fill_radius_step, 1.1f /* radius */);
+                        if (circles[i].fill_radius[0] > 1.0f /* radius */) {
+                            circles[i].filled = 2;
+                        }
+                        GLfloat t[2] = {v.x, v.y};
+                        glUniform2fv(fill_entrance_uniform, 1, t);
+                        glUniform1fv(fill_radius_uniform, 1, circles[i].fill_radius);
+                    } else {
+                        GLfloat fill_entrances[MAX_VERTEX_ENTRANCES * 2] = {0};
+                        int aux_count = 0;
+                        for (int j = 0; j < circles[i].num_fill_entrances; j++) {
+                            vertex_t predecessor = circles[circles[i].fill_entrance_index[j]];
+                            if (predecessor.filled == 2) {
+                                circles[i].fill_radius[j] = min(circles[i].fill_radius[j] + fill_radius_step, 2.1f /* radius */);
+                                if (circles[i].fill_radius[j] > 2.0f /* radius * 2 */) {
+                                    circles[i].filled = 2;
+                                }
+                            }
+                            v2f fill_entrance = sub_v2f(circles[i].pos, predecessor.pos);
+                            fill_entrance = add_v2f(fill_entrance, scale_v2f(normalize_v2f(fill_entrance), -1.0f /*radius*/));
+                            fill_entrance = add_v2f(fill_entrance, predecessor.pos);
+                            fill_entrance = add_v2f(frame_translation, fill_entrance);
+                            fill_entrances[aux_count++] = fill_entrance.x;
+                            fill_entrances[aux_count++] = fill_entrance.y;
+                        }
+                        glUniform2fv(fill_entrance_uniform, circles[i].num_fill_entrances, fill_entrances);
+                        glUniform1fv(fill_radius_uniform, circles[i].num_fill_entrances, circles[i].fill_radius);
+                    }
+                }
+                if (circles[i].filled) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
-                } else if (global_state.circles[i].selected) {
+                } else if (circles[i].selected) { // TODO: maybe remove/rethink this whole selected concept
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
+                } else if (global_state.editing_circle == i) {
+                    glUniform3f(color_uniform, VERTEX_EDITING_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
+                glBindVertexArray(0);
+
+                // draw vertex weight
+                v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+                v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+                char str[10];
+                itoa(circles[i].weight, str, 10);
+                char *aux = str;
+                float x_off = 0, y_off = 0;
+                while (*aux) {
+                    stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
+                    x_off += baked_char.xadvance;
+                    y_off = min(y_off, baked_char.yoff);
+                    //y_off = max(y_off, baked_char.yoff);
+                    aux++;
+                }
+                v.x -= x_off / 2;
+                v.y += y_off / 2;
+                font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
             }
-            glBindVertexArray(0);
         }
 
         // draw arrows
         {
+            glUseProgram(shader_program);
             glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0);
+            // TODO: think about this
+            glUniform1i(filled_uniform, 0);
+            glUniform2f(fill_entrance_uniform, 0, 0);
+            glUniform1f(fill_radius_uniform, 0);
 
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
@@ -592,6 +832,9 @@ int main(int argc, char **argv) {
             }
             glBindVertexArray(0);
         }
+
+        // DEBUG
+        //font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO 44545445455!");
 
         glfwSwapBuffers(window);
     }
