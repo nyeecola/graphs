@@ -30,6 +30,7 @@
 #undef TYPE_NAME
 
 typedef struct {
+    int weight;
     v2f pos;
     bool selected;
     int *children;
@@ -52,6 +53,8 @@ typedef struct {
     v2f cur_translation;
     vertex_t *circles;
     int num_circles;
+    int editing_circle; // NOTE: -1 means no vertex is currently being edited (weight)
+    char temp_weight_str[10];
 
     int current_animation_root; // index of the current animation root vertex
 } global_state_t;
@@ -257,8 +260,9 @@ v2f get_cursor_world_space(GLFWwindow *window, v2f translation, double zoom) {
     return r;
 }
 
-void create_vertex(global_state_t *global_state, v2f p) {
+void create_vertex(global_state_t *global_state, v2f p, int weight) {
     vertex_t v;
+    v.weight = weight;
     v.pos = p;
     v.selected = FALSE;
     v.children = malloc(MAX_VERTICES * sizeof(*v.children));
@@ -295,6 +299,7 @@ void delete_vertex(global_state_t *global_state, int index) {
         global_state->circles[i-1] = global_state->circles[i];
     }
     global_state->num_circles--;
+    global_state->editing_circle = -1;
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -307,7 +312,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        create_vertex(global_state, cursor_pos);
+        create_vertex(global_state, cursor_pos, 1);
     }
 
     // delete vertex when D is pressed
@@ -322,8 +327,46 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
     }
 
-    // run BFS when 1 is pressed
-    if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+    // handle changing vertex weight when X is pressed (NOTE: user must press ENTER to finalize or ESC to cancel)
+    {
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) {
+            for (int i = 0; i < global_state->num_circles; i++) {
+                v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
+                double r = 1.0f;
+                if (p.x * p.x + p.y * p.y <= r * r) {
+                    global_state->editing_circle = i;
+                    global_state->temp_weight_str[0] = 0;
+                    break;
+                }
+            }
+        }
+        if (global_state->editing_circle != -1 && action == GLFW_PRESS) {
+            if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) {
+                if (strlen(global_state->temp_weight_str) != 10) {
+                    assert(strlen(global_state->temp_weight_str) < 10);
+                    char temp_str[2] = "";
+                    temp_str[0] = '0' + key - GLFW_KEY_0;
+                    strcat(global_state->temp_weight_str, temp_str);
+                    global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                }
+            }
+            if (key == GLFW_KEY_BACKSPACE) {
+                int len = strlen(global_state->temp_weight_str);
+                if (len > 0) {
+                    global_state->temp_weight_str[len-1] = 0;
+                } else {
+                    strcpy(global_state->temp_weight_str, "0");
+                }
+                global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+            }
+            if (key == GLFW_KEY_ENTER || key == GLFW_KEY_ESCAPE) {
+                global_state->editing_circle = -1;
+            }
+        }
+    }
+
+    // run BFS when B is pressed
+    if (key == GLFW_KEY_B && action == GLFW_PRESS) {
         for (int i = 0; i < global_state->num_circles; i++) {
             v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
             double r = 1.0f;
@@ -611,10 +654,12 @@ int main(int argc, char **argv) {
     global_state.cur_translation.y = 0;
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
     global_state.num_circles = 0;
-    // TEMP: add some circles just for testing purposes
-    create_vertex(&global_state, create_v2f(2.2, 1.1));
-    create_vertex(&global_state, create_v2f(-1.4, 2.1));
-    create_vertex(&global_state, create_v2f(0.0, 0.0));
+    global_state.editing_circle = -1;
+    //global_state.temp_weight_str; // NOTE: no need to initialize this
+    // DEBUG: add some circles just for testing purposes
+    create_vertex(&global_state, create_v2f(2.2, 1.1), 1);
+    create_vertex(&global_state, create_v2f(-1.4, 2.1), 1);
+    create_vertex(&global_state, create_v2f(0.0, 0.0), 1);
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
@@ -724,21 +769,32 @@ int main(int argc, char **argv) {
                 }
                 if (circles[i].filled) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
-                } else if (circles[i].selected) {
+                } else if (circles[i].selected) { // TODO: maybe remove/rethink this whole selected concept
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
+                } else if (global_state.editing_circle == i) {
+                    glUniform3f(color_uniform, VERTEX_EDITING_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
                 glBindVertexArray(0);
 
-                // TODO: render all text after all vertexes, or find other way to fix blending
-                char str[2] = "2";
+                // draw vertex weight
                 v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
                 v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
-                stbtt_bakedchar baked_char = cdata[str[0] - 32]; // TODO: remove this magic number
-                v.x -= baked_char.xadvance / 2;
-                v.y += baked_char.yoff / 2;
+                char str[10];
+                itoa(circles[i].weight, str, 10);
+                char *aux = str;
+                float x_off = 0, y_off = 0;
+                while (*aux) {
+                    stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
+                    x_off += baked_char.xadvance;
+                    y_off = min(y_off, baked_char.yoff);
+                    //y_off = max(y_off, baked_char.yoff);
+                    aux++;
+                }
+                v.x -= x_off / 2;
+                v.y += y_off / 2;
                 font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
             }
         }
@@ -777,7 +833,8 @@ int main(int argc, char **argv) {
             glBindVertexArray(0);
         }
 
-        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO PRINT!");
+        // DEBUG
+        //font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO 44545445455!");
 
         glfwSwapBuffers(window);
     }
