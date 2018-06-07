@@ -5,6 +5,7 @@ High priority:
 - Finish and clean up font system
 
 Regular priority:
+- Create some tool to organize TODOs, DEBUGs and NOTEs
 - Automatize build process, add grep for TODOs && DEBUGs
 - Create documentation
 - Make it so that multiple vertices can be dragged at the same time 
