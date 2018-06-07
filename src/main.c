@@ -30,10 +30,16 @@
 #undef TYPE_NAME
 
 typedef struct {
+    //int orig; // NOTE: unused
+    int dest;
+    int weight;
+} edge_t;
+
+typedef struct {
     int weight;
     v2f pos;
     bool selected;
-    int *children;
+    edge_t *children;
     int num_children;
 
     int filled; // 0 means not found, 1 means filling, 2 means filled
@@ -214,7 +220,7 @@ void BFS(global_state_t *global_state, int root_index) {
         visited[node] = 2;
 
         for (int i = 0; i < circles[node].num_children; i++) {
-            int children_index = circles[node].children[i];
+            int children_index = circles[node].children[i].dest;
 #if 1
             // multi_entrance animation enabled
 
@@ -279,11 +285,11 @@ void delete_vertex(global_state_t *global_state, int index) {
     for (int i = 0; i < global_state->num_circles; i++) {
         int removed_location = -1;
         for (int j = 0; j < global_state->circles[i].num_children; j++) {
-            if (global_state->circles[i].children[j] == index) {
+            if (global_state->circles[i].children[j].dest == index) {
                 assert(removed_location == -1);
                 removed_location = j;
-            } else if (global_state->circles[i].children[j] > index) {
-                global_state->circles[i].children[j]--;
+            } else if (global_state->circles[i].children[j].dest > index) {
+                global_state->circles[i].children[j].dest--;
             }
         }
         if (removed_location != -1) {
@@ -427,13 +433,16 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
                         // check if vertice doesn't already belong to children
                         bool is_child_already = false;
                         for (int j = 0; j < global_state->circles[vertex].num_children; j++) {
-                            if (global_state->circles[vertex].children[j] == i) {
+                            if (global_state->circles[vertex].children[j].dest == i) {
                                 is_child_already = true;
                             }
                         }
 
                         if (!is_child_already) {
-                            global_state->circles[vertex].children[global_state->circles[vertex].num_children++] = i;
+                            int cur_num_children = global_state->circles[vertex].num_children;
+                            global_state->circles[vertex].children[cur_num_children].dest = i;
+                            global_state->circles[vertex].children[cur_num_children].weight = 1;
+                            global_state->circles[vertex].num_children++;
                             break;
                         }
                     }
@@ -734,7 +743,6 @@ int main(int argc, char **argv) {
                 v2f v = add_v2f(frame_translation, circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
                 glUniform1i(filled_uniform, circles[i].filled);
-                //printf("num fill entrances %d\n", circles[i].num_fill_entrances);
                 glUniform1i(num_entrances_uniform, circles[i].num_fill_entrances);
                 if (circles[i].filled > 0) {
                     if (global_state.current_animation_root == i) {
@@ -780,27 +788,67 @@ int main(int argc, char **argv) {
                 glBindVertexArray(0);
 
                 // draw vertex weight
-                v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
-                v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
-                char str[10];
-                itoa(circles[i].weight, str, 10);
-                char *aux = str;
-                float x_off = 0, y_off = 0;
-                while (*aux) {
-                    stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
-                    x_off += baked_char.xadvance;
-                    y_off = min(y_off, baked_char.yoff);
-                    //y_off = max(y_off, baked_char.yoff);
-                    aux++;
+                {
+                    v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+                    v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+                    char str[10];
+                    itoa(circles[i].weight, str, 10);
+                    char *aux = str;
+                    float x_off = 0, y_off = 0;
+                    while (*aux) {
+                        stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
+                        x_off += baked_char.xadvance;
+                        y_off = min(y_off, baked_char.yoff);
+                        //y_off = max(y_off, baked_char.yoff);
+                        aux++;
+                    }
+                    v.x -= x_off / 2;
+                    v.y += y_off / 2;
+                    font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
                 }
-                v.x -= x_off / 2;
-                v.y += y_off / 2;
-                font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
             }
         }
 
-        // draw arrows
+        // draw edges
         {
+            // vertices children
+            for (int i = 0; i < global_state.num_circles; i++) {
+                for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                    glUseProgram(shader_program);
+                    glBindVertexArray(VAO2);
+                    glUniform3f(translation_uniform, 0, 0, 0);
+                    // TODO: think about this
+                    glUniform1i(filled_uniform, 0);
+                    glUniform2f(fill_entrance_uniform, 0, 0);
+                    glUniform1f(fill_radius_uniform, 0);
+
+                    if (global_state.circles[i].filled) {
+                        glUniform3f(color_uniform, ARROW_FILLED_COLOR);
+                    } else {
+                        glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
+                    }
+                    v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
+                    v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j].dest].pos);
+                    draw_arrow(VBO2, &global_state, v1, v2, true);
+                    glBindVertexArray(0);
+
+                    // draw edge weight
+                    {
+                        v1.x = (v1.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+                        v1.y = (-v1.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+                        v2.x = (v2.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+                        v2.y = (-v2.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+                        v2f temp_v = scale_v2f(sub_v2f(v2, v1), 0.5f);
+                        v2f v3 = add_v2f(v1, temp_v);
+                        v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
+                        v3 = add_v2f(v3, v4);
+                        char w[10];
+                        itoa(global_state.circles[i].children[j].weight, w, 10);
+                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v3.x, v3.y, w);
+                    }
+                }
+            }
+
             glUseProgram(shader_program);
             glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0);
@@ -808,23 +856,8 @@ int main(int argc, char **argv) {
             glUniform1i(filled_uniform, 0);
             glUniform2f(fill_entrance_uniform, 0, 0);
             glUniform1f(fill_radius_uniform, 0);
-
-            // vertices children
-            for (int i = 0; i < global_state.num_circles; i++) {
-                for (int j = 0; j < global_state.circles[i].num_children; j++) {
-                    if (global_state.circles[i].filled) {
-                        glUniform3f(color_uniform, ARROW_FILLED_COLOR);
-                    } else {
-                        glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
-                    }
-                    v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
-                    v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j]].pos);
-                    draw_arrow(VBO2, &global_state, v1, v2, true);
-                }
-            }
-
             glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
-            // arrow being currently created
+            // edge being currently created
             if (global_state.modifying_vertex != -1) {
                 v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
                 v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
