@@ -380,6 +380,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                     global_state->circles[i].num_children++;
                 }
             }
+            free(missing);
         }
     }
 
@@ -901,7 +902,7 @@ int main(int argc, char **argv) {
                     v.x = (v.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
                     v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
                     char str[10];
-                    itoa(circles[i].weight, str, 10);
+                    sprintf(str, "%d", circles[i].weight);
                     char *aux = str;
                     float x_off = 0, y_off = 0;
                     while (*aux) {
@@ -958,7 +959,7 @@ int main(int argc, char **argv) {
                         v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
                         v3 = add_v2f(v3, v4);
                         char w[10];
-                        itoa(global_state.circles[i].children[j].weight, w, 10);
+                        sprintf(w, "%d", global_state.circles[i].children[j].weight);
                         char *aux = w;
                         float x_off = 0, y_off = 0;
                         while (*aux) {
