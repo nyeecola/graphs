@@ -195,7 +195,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
                     || *text == 'O' || *text == 'U') {
                 baked_char.yoff += 1.0f;
             }
-            if (*text == 'p' || *text == 'q') {
+            if (*text == 'g' || *text == 'p' || *text == 'q') {
                 baked_char.yoff += 4.0f;
             }
 
@@ -360,8 +360,27 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         global_state->showing_menu = !global_state->showing_menu;
     }
 
+    // export to file when E is pressed
     if (key == GLFW_KEY_E && action == GLFW_PRESS) {
         export(global_state, "output.txt");
+    }
+
+    // make graph complete when C is pressed
+    if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+        for (int i = 0; i < global_state->num_circles; i++) {
+            bool *missing = calloc(global_state->num_circles, sizeof(*missing));
+            for (int j = 0; j < global_state->circles[i].num_children; j++) {
+                missing[global_state->circles[i].children[j].dest] = 1;
+            }
+            for (int j = 0; j < global_state->num_circles; j++) {
+                if (!missing[j] && i != j) {
+                    int cur_num_children = global_state->circles[i].num_children;
+                    global_state->circles[i].children[cur_num_children].dest = j;
+                    global_state->circles[i].children[cur_num_children].weight = 1;
+                    global_state->circles[i].num_children++;
+                }
+            }
+        }
     }
 
     // create vertex when A is pressed
@@ -770,7 +789,7 @@ int main(int argc, char **argv) {
     {
         unsigned char *ttf_buffer = malloc((1<<20) * sizeof(*ttf_buffer));
         unsigned char temp_bitmap[512*521];
-        fread(ttf_buffer, 1, 1<<20, fopen("c:/windows/fonts/arial.ttf", "rb"));
+        fread(ttf_buffer, 1, 1<<20, fopen("arial.ttf", "rb"));
         stbtt_BakeFontBitmap(ttf_buffer, 0, FONT_SIZE, temp_bitmap, 512, 512, 32, 96, cdata);
         free(ttf_buffer);
         glBindTexture(GL_TEXTURE_2D, ftex);
@@ -994,9 +1013,9 @@ int main(int argc, char **argv) {
             float background[6 * 3] = {
                 DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 320, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 320, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 320, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 350, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 350, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 350, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO4);
@@ -1020,6 +1039,9 @@ int main(int argc, char **argv) {
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  D               Deleta um vertice", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  C               Completa o grafo com arestas de valor 1", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0);
