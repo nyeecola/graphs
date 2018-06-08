@@ -65,6 +65,7 @@ typedef struct {
     edge_t *editing_edge; // NOTE: NULL means no edge is currently being edited
     // NOTE: a edge and a circle can't both be edited at the same time
     char temp_weight_str[10];
+    bool showing_menu;
 
     int current_animation_root; // index of the current animation root vertex
 } global_state_t;
@@ -164,14 +165,23 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
         if (*text >= 32 && *text < 128) {
             stbtt_aligned_quad q;
             stbtt_GetBakedQuad(cdata, 512, 512, *text-32, &x, &y, &q, 1);
+            stbtt_bakedchar baked_char = cdata[*text - 32]; // TODO: remove this magic number
+            //printf("%f %f %f %f %f\n", q.x0, q.y0, q.x1, q.y1, baked_char.yoff);
+            if (*text == 'e' || *text == 'a' || *text == 'd' || *text == 'o' || *text == 'u' || *text == 's'
+                    || *text == 'c' || *text == 't' || *text == '/' || *text == 'C' || *text == 'S') {
+                baked_char.yoff += 1.0f;
+            }
+            if (*text == 'p') {
+                baked_char.yoff += 4.0f;
+            }
 
             float buffer[6 * 5] = {
-                q.x0, q.y0, -0.4, q.s0, q.t1,
-                q.x1, q.y0, -0.4, q.s1, q.t1,
-                q.x0, q.y1, -0.4, q.s0, q.t0,
-                q.x1, q.y0, -0.4, q.s1, q.t1,
-                q.x1, q.y1, -0.4, q.s1, q.t0,
-                q.x0, q.y1, -0.4, q.s0, q.t0
+                q.x0, q.y0-baked_char.yoff, -0.4, q.s0, q.t1,
+                q.x1, q.y0-baked_char.yoff, -0.4, q.s1, q.t1,
+                q.x0, q.y1-baked_char.yoff, -0.4, q.s0, q.t0,
+                q.x1, q.y0-baked_char.yoff, -0.4, q.s1, q.t1,
+                q.x1, q.y1-baked_char.yoff, -0.4, q.s1, q.t0,
+                q.x0, q.y1-baked_char.yoff, -0.4, q.s0, q.t0
             };
 
             glActiveTexture(GL_TEXTURE0);
@@ -321,6 +331,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     v2f cursor_pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
 
+    // show help when TAB is pressed
+    if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+        global_state->showing_menu = !global_state->showing_menu;
+    }
+
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
         create_vertex(global_state, cursor_pos, 1);
@@ -402,7 +417,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                     global_state->editing_edge->weight = atoi(global_state->temp_weight_str);
                 }
             }
-            if (key == GLFW_KEY_ENTER || key == GLFW_KEY_ESCAPE) {
+            if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER|| key == GLFW_KEY_ESCAPE) {
                 global_state->editing_circle = -1;
                 global_state->editing_edge = NULL;
             }
@@ -657,6 +672,11 @@ int main(int argc, char **argv) {
     GLuint VBO3, VAO3;
     glGenBuffers(1, &VBO3);
     glGenVertexArrays(1, &VAO3);
+
+    // menu background buffers
+    GLuint VBO4, VAO4;
+    glGenBuffers(1, &VBO4);
+    glGenVertexArrays(1, &VAO4);
     
     // initialize program data
 
@@ -705,6 +725,7 @@ int main(int argc, char **argv) {
     global_state.num_circles = 0;
     global_state.editing_circle = -1;
     global_state.editing_edge = NULL;
+    global_state.showing_menu = false;
     //global_state.temp_weight_str; // NOTE: no need to initialize this
     // DEBUG: add some circles just for testing purposes
     create_vertex(&global_state, create_v2f(2.2, 1.1), 1);
@@ -821,7 +842,7 @@ int main(int argc, char **argv) {
                 } else if (circles[i].selected) { // TODO: maybe remove/rethink this whole selected concept
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
                 //} else if (global_state.editing_circle == i) {
-                //    glUniform3f(color_uniform, VERTEX_EDITING_COLOR);
+                //    glUniform3f(color_uniform, WEIGHT_EDITING_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
@@ -844,11 +865,11 @@ int main(int argc, char **argv) {
                         aux++;
                     }
                     v.x -= x_off / 2;
-                    v.y += y_off / 2;
+                    v.y -= y_off / 2;
 
                     if (global_state.editing_circle == i) {
                         font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                  ftex, v.x, v.y, str, VERTEX_EDITING_COLOR);
+                                                  ftex, v.x, v.y, str, WEIGHT_EDITING_COLOR);
                     } else {
                         font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                                   ftex, v.x, v.y, str, 0, 0, 0);
@@ -865,7 +886,6 @@ int main(int argc, char **argv) {
                     glUseProgram(shader_program);
                     glBindVertexArray(VAO2);
                     glUniform3f(translation_uniform, 0, 0, 0);
-                    // TODO: think about this
                     glUniform1i(filled_uniform, 0);
                     glUniform2f(fill_entrance_uniform, 0, 0);
                     glUniform1f(fill_radius_uniform, 0);
@@ -892,11 +912,22 @@ int main(int argc, char **argv) {
                         v3 = add_v2f(v3, v4);
                         char w[10];
                         itoa(global_state.circles[i].children[j].weight, w, 10);
+                        char *aux = w;
+                        float x_off = 0, y_off = 0;
+                        while (*aux) {
+                            stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
+                            x_off += baked_char.xadvance;
+                            y_off = min(y_off, baked_char.yoff);
+                            //y_off = max(y_off, baked_char.yoff);
+                            aux++;
+                        }
+                        v3.x -= x_off / 2;
+                        v3.y -= y_off / 2;
                         global_state.circles[i].children[j].weight_pos_screen = v3;
 
                         if (global_state.editing_edge == &global_state.circles[i].children[j]) {
                             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                      ftex, v3.x, v3.y, w, VERTEX_EDITING_COLOR);
+                                                      ftex, v3.x, v3.y, w, WEIGHT_EDITING_COLOR);
                         } else {
                             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                                       ftex, v3.x, v3.y, w, 0, 0, 0);
@@ -922,8 +953,55 @@ int main(int argc, char **argv) {
             glBindVertexArray(0);
         }
 
-        // DEBUG
-        //font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, 0, 0, "HELLO 44545445455!");
+        // draw help menu
+        if (global_state.showing_menu) {
+            glUseProgram(shader_program);
+            glBindVertexArray(VAO4);
+            glUniform3f(translation_uniform, -DEFAULT_SCREEN_WIDTH/2, DEFAULT_SCREEN_HEIGHT/2, 0);
+            glUniform1i(filled_uniform, 0);
+            glUniform2f(fill_entrance_uniform, 0, 0);
+            glUniform1f(fill_radius_uniform, 0);
+            glUniform1f(scale_uniform, 1/(DEFAULT_SCREEN_WIDTH/2.0f));
+            glUniform3f(color_uniform, 0.7f, 0.7f, 0.7f);
+            float background[6 * 3] = {
+                DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
+                DEFAULT_SCREEN_WIDTH - 20, - 70, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
+                DEFAULT_SCREEN_WIDTH - 20, - 300, 0.5,
+                DEFAULT_SCREEN_WIDTH - 20, - 70, 0.5,
+            };
+            glBindBuffer(GL_ARRAY_BUFFER, VBO4);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(background), background, GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(0);
+
+            v2f pos = create_v2f(DEFAULT_SCREEN_WIDTH - 500, 100);
+            float line_height = FONT_SIZE + 1.0f;
+            int line_count = 0;
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "      Comandos:", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++), "", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  A          Adiciona um vertice", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  D          Deleta um vertice", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  CTRL   Arraste para adicionar uma aresta", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  X          Altera o peso de um vertice/aresta", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  B          Executa um BFS comecando no vertice do cursor", 0, 0, 0);
+        }
 
         glfwSwapBuffers(window);
     }
