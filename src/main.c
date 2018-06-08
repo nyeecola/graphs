@@ -33,6 +33,8 @@ typedef struct {
     //int orig; // NOTE: unused
     int dest;
     int weight;
+
+    v2f weight_pos_screen;
 } edge_t;
 
 typedef struct {
@@ -60,6 +62,8 @@ typedef struct {
     vertex_t *circles;
     int num_circles;
     int editing_circle; // NOTE: -1 means no vertex is currently being edited (weight)
+    edge_t *editing_edge; // NOTE: NULL means no edge is currently being edited
+    // NOTE: a edge and a circle can't both be edited at the same time
     char temp_weight_str[10];
 
     int current_animation_root; // index of the current animation root vertex
@@ -140,7 +144,7 @@ GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
     return shader_program;
 }
 
-void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text) {
+void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text, float r, float g, float b) {
     x -= DEFAULT_SCREEN_WIDTH / 2;
     y = DEFAULT_SCREEN_HEIGHT / 2 - y;
 
@@ -152,7 +156,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
     glUniform1i(glGetUniformLocation(font_shader_program, "tex"), 0);
     glUniform1f(glGetUniformLocation(font_shader_program, "window_width"), DEFAULT_SCREEN_WIDTH);
     glUniform1f(glGetUniformLocation(font_shader_program, "window_height"), DEFAULT_SCREEN_HEIGHT);
-    glUniform3f(glGetUniformLocation(font_shader_program, "color"), 0.0f, 0.0f, 0.0f);
+    glUniform3f(glGetUniformLocation(font_shader_program, "color"), r, g, b);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -306,6 +310,7 @@ void delete_vertex(global_state_t *global_state, int index) {
     }
     global_state->num_circles--;
     global_state->editing_circle = -1;
+    global_state->editing_edge = NULL;
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
@@ -333,27 +338,55 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         }
     }
 
-    // handle changing vertex weight when X is pressed (NOTE: user must press ENTER to finalize or ESC to cancel)
+    // handle changing weights when X is pressed (NOTE: user must press ENTER to finalize or ESC to cancel)
     {
         if (key == GLFW_KEY_X && action == GLFW_PRESS) {
-            for (int i = 0; i < global_state->num_circles; i++) {
+            global_state->editing_circle = -1;
+            global_state->editing_edge = NULL;
+
+            // vertex weights
+            bool found = false;
+            for (int i = 0; i < global_state->num_circles && !found; i++) {
                 v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
                 double r = 1.0f;
                 if (p.x * p.x + p.y * p.y <= r * r) {
                     global_state->editing_circle = i;
                     global_state->temp_weight_str[0] = 0;
-                    break;
+                    found = true;
+                }
+            }
+            
+            // edge weights
+            for (int i = 0; i < global_state->num_circles && !found; i++) {
+                for (int j = 0; j < global_state->circles[i].num_children && !found; j++) {
+                    edge_t *edge = &global_state->circles[i].children[j];
+
+                    v2f screen_space_cursor_pos;
+                    glfwGetCursorPos(window, &screen_space_cursor_pos.x, &screen_space_cursor_pos.y);
+
+                    v2f p = sub_v2f(edge->weight_pos_screen, screen_space_cursor_pos);
+    
+                    double r = FONT_SIZE / 2;
+                    if (p.x * p.x + p.y * p.y <= r * r) {
+                        global_state->editing_edge = edge;
+                        global_state->temp_weight_str[0] = 0;
+                        found = true;
+                    }
                 }
             }
         }
-        if (global_state->editing_circle != -1 && action == GLFW_PRESS) {
+        if ((global_state->editing_circle != -1 || global_state->editing_edge) && action == GLFW_PRESS) {
             if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9) {
                 if (strlen(global_state->temp_weight_str) != 10) {
                     assert(strlen(global_state->temp_weight_str) < 10);
                     char temp_str[2] = "";
                     temp_str[0] = '0' + key - GLFW_KEY_0;
                     strcat(global_state->temp_weight_str, temp_str);
-                    global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                    if (global_state->editing_circle != -1) {
+                        global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                    } else {
+                        global_state->editing_edge->weight = atoi(global_state->temp_weight_str);
+                    }
                 }
             }
             if (key == GLFW_KEY_BACKSPACE) {
@@ -363,10 +396,15 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                 } else {
                     strcpy(global_state->temp_weight_str, "0");
                 }
-                global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                if (global_state->editing_circle != -1) {
+                    global_state->circles[global_state->editing_circle].weight = atoi(global_state->temp_weight_str);
+                } else {
+                    global_state->editing_edge->weight = atoi(global_state->temp_weight_str);
+                }
             }
             if (key == GLFW_KEY_ENTER || key == GLFW_KEY_ESCAPE) {
                 global_state->editing_circle = -1;
+                global_state->editing_edge = NULL;
             }
         }
     }
@@ -392,15 +430,17 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
 
     v2f mouse_pos = get_cursor_world_space(window, global_state->last_translation, global_state->zoom);
 
-    // handle adding dependencies
-    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS && (mods & GLFW_MOD_CONTROL)) {
-        global_state->modifying_vertex = -1; // unselect vertices
-        for (int i = 0; i < global_state->num_circles; i++) {
-            v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
-            double r = 1.0f;
-            if (p.x * p.x + p.y * p.y <= r * r) {
-                global_state->modifying_vertex = i;
-                break;
+    if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+        // handle adding dependencies
+        if (mods & GLFW_MOD_CONTROL) {
+            global_state->modifying_vertex = -1; // unselect vertices
+            for (int i = 0; i < global_state->num_circles; i++) {
+                v2f p = sub_v2f(global_state->circles[i].pos, mouse_pos);
+                double r = 1.0f;
+                if (p.x * p.x + p.y * p.y <= r * r) {
+                    global_state->modifying_vertex = i;
+                    break;
+                }
             }
         }
     }
@@ -664,6 +704,7 @@ int main(int argc, char **argv) {
     global_state.circles = malloc(MAX_VERTICES * sizeof(*global_state.circles));
     global_state.num_circles = 0;
     global_state.editing_circle = -1;
+    global_state.editing_edge = NULL;
     //global_state.temp_weight_str; // NOTE: no need to initialize this
     // DEBUG: add some circles just for testing purposes
     create_vertex(&global_state, create_v2f(2.2, 1.1), 1);
@@ -779,8 +820,8 @@ int main(int argc, char **argv) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
                 } else if (circles[i].selected) { // TODO: maybe remove/rethink this whole selected concept
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
-                } else if (global_state.editing_circle == i) {
-                    glUniform3f(color_uniform, VERTEX_EDITING_COLOR);
+                //} else if (global_state.editing_circle == i) {
+                //    glUniform3f(color_uniform, VERTEX_EDITING_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
@@ -804,7 +845,14 @@ int main(int argc, char **argv) {
                     }
                     v.x -= x_off / 2;
                     v.y += y_off / 2;
-                    font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v.x, v.y, str);
+
+                    if (global_state.editing_circle == i) {
+                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                                  ftex, v.x, v.y, str, VERTEX_EDITING_COLOR);
+                    } else {
+                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                                  ftex, v.x, v.y, str, 0, 0, 0);
+                    }
                 }
             }
         }
@@ -844,7 +892,15 @@ int main(int argc, char **argv) {
                         v3 = add_v2f(v3, v4);
                         char w[10];
                         itoa(global_state.circles[i].children[j].weight, w, 10);
-                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata, ftex, v3.x, v3.y, w);
+                        global_state.circles[i].children[j].weight_pos_screen = v3;
+
+                        if (global_state.editing_edge == &global_state.circles[i].children[j]) {
+                            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                                      ftex, v3.x, v3.y, w, VERTEX_EDITING_COLOR);
+                        } else {
+                            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                                      ftex, v3.x, v3.y, w, 0, 0, 0);
+                        }
                     }
                 }
             }
