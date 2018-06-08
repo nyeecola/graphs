@@ -97,6 +97,29 @@ char *load_text_file_content(char *filename) {
     return buffer;
 }
 
+void export(global_state_t *global_state, char *filename) {
+    FILE *f = fopen(filename, "w");
+    assert(f);
+    int count_edges = 0;
+    for (int i = 0; i < global_state->num_circles; i++) {
+        count_edges += global_state->circles[i].num_children;
+    }
+    fprintf(f, "%d %d\n", global_state->num_circles, count_edges);
+    for (int i = 0; i < global_state->num_circles; i++) {
+        int x = (int) (global_state->circles[i].pos.x * 4);
+        int y = (int) (global_state->circles[i].pos.y * 4);
+        fprintf(f, "%d %d %d %d\n", i, x, y, global_state->circles[i].weight);
+    }
+    for (int i = 0; i < global_state->num_circles; i++) {
+        for (int j = 0; j < global_state->circles[i].num_children; j++) {
+            edge_t edge = global_state->circles[i].children[j];
+            fprintf(f, "%d %d %d\n", i, edge.dest, edge.weight);
+        }
+    }
+    fprintf(f, "%d\n", rand() % global_state->num_circles);
+    fclose(f);
+}
+
 GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
     const char *vertex_shader_content = load_text_file_content(vertex_file_name);
     const char *frag_shader_content = load_text_file_content(frag_file_name);
@@ -172,7 +195,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
                     || *text == 'O' || *text == 'U') {
                 baked_char.yoff += 1.0f;
             }
-            if (*text == 'p') {
+            if (*text == 'p' || *text == 'q') {
                 baked_char.yoff += 4.0f;
             }
 
@@ -337,6 +360,10 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         global_state->showing_menu = !global_state->showing_menu;
     }
 
+    if (key == GLFW_KEY_E && action == GLFW_PRESS) {
+        export(global_state, "output.txt");
+    }
+
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
         create_vertex(global_state, cursor_pos, 1);
@@ -382,7 +409,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
                     v2f p = sub_v2f(edge->weight_pos_screen, screen_space_cursor_pos);
     
-                    double r = FONT_SIZE / 2;
+                    double r = FONT_SIZE;
                     if (p.x * p.x + p.y * p.y <= r * r) {
                         global_state->editing_edge = edge;
                         global_state->temp_weight_str[0] = 0;
@@ -967,9 +994,9 @@ int main(int argc, char **argv) {
             float background[6 * 3] = {
                 DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 300, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 320, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 320, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 320, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO4);
@@ -1008,6 +1035,9 @@ int main(int argc, char **argv) {
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  MOUSE2  Arrastar a tela", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  E               Exportar para arquivo", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  TAB          Esconde esse menu", 0, 0, 0);
