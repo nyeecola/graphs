@@ -1014,6 +1014,7 @@ int main(int argc, char **argv) {
 
         // draw help menu
         if (global_state.showing_menu) {
+            glDisable(GL_DEPTH_TEST);
             glUseProgram(shader_program);
             glBindVertexArray(VAO4);
             glUniform3f(translation_uniform, -DEFAULT_SCREEN_WIDTH/2, DEFAULT_SCREEN_HEIGHT/2, 0);
@@ -1036,6 +1037,7 @@ int main(int argc, char **argv) {
             glEnableVertexAttribArray(0);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             glBindVertexArray(0);
+            glEnable(GL_DEPTH_TEST);
 
             v2f pos = create_v2f(DEFAULT_SCREEN_WIDTH - 500, 100);
             float line_height = FONT_SIZE + 1.0f;
