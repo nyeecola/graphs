@@ -168,7 +168,8 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
             stbtt_bakedchar baked_char = cdata[*text - 32]; // TODO: remove this magic number
             //printf("%f %f %f %f %f\n", q.x0, q.y0, q.x1, q.y1, baked_char.yoff);
             if (*text == 'e' || *text == 'a' || *text == 'd' || *text == 'o' || *text == 'u' || *text == 's'
-                    || *text == 'c' || *text == 't' || *text == '/' || *text == 'C' || *text == 'S') {
+                    || *text == 'c' || *text == 't' || *text == '/' || *text == 'C' || *text == 'S'
+                    || *text == 'O' || *text == 'U') {
                 baked_char.yoff += 1.0f;
             }
             if (*text == 'p') {
@@ -725,12 +726,12 @@ int main(int argc, char **argv) {
     global_state.num_circles = 0;
     global_state.editing_circle = -1;
     global_state.editing_edge = NULL;
-    global_state.showing_menu = false;
+    global_state.showing_menu = true;
     //global_state.temp_weight_str; // NOTE: no need to initialize this
     // DEBUG: add some circles just for testing purposes
-    create_vertex(&global_state, create_v2f(2.2, 1.1), 1);
-    create_vertex(&global_state, create_v2f(-1.4, 2.1), 1);
-    create_vertex(&global_state, create_v2f(0.0, 0.0), 1);
+    create_vertex(&global_state, create_v2f(1.2, -2.6), 1);
+    create_vertex(&global_state, create_v2f(-6.4, -1.1), 1);
+    create_vertex(&global_state, create_v2f(-4.1, -4.0), 1);
 
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
@@ -965,11 +966,11 @@ int main(int argc, char **argv) {
             glUniform3f(color_uniform, 0.7f, 0.7f, 0.7f);
             float background[6 * 3] = {
                 DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 20, - 70, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
                 DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
                 DEFAULT_SCREEN_WIDTH - 500, - 300, 0.5,
-                DEFAULT_SCREEN_WIDTH - 20, - 300, 0.5,
-                DEFAULT_SCREEN_WIDTH - 20, - 70, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 300, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO4);
             glBufferData(GL_ARRAY_BUFFER, sizeof(background), background, GL_STATIC_DRAW);
@@ -988,19 +989,28 @@ int main(int argc, char **argv) {
                                       ftex, pos.x, pos.y + line_height * (line_count++), "", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  A          Adiciona um vertice", 0, 0, 0);
+                                      "  A               Adiciona um vertice", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  D          Deleta um vertice", 0, 0, 0);
+                                      "  D               Deleta um vertice", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  CTRL   Arraste para adicionar uma aresta", 0, 0, 0);
+                                      "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  X          Altera o peso de um vertice/aresta", 0, 0, 0);
+                                      "  X               Altera o peso de um vertice/aresta", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  B          Executa um BFS comecando no vertice do cursor", 0, 0, 0);
+                                      "  B               Executa um BFS comecando no vertice do cursor", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  SCROLL   Zoom", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  MOUSE2  Arrastar a tela", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  TAB          Esconde esse menu", 0, 0, 0);
         }
 
         glfwSwapBuffers(window);
