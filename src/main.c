@@ -386,7 +386,18 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 
     // create vertex when A is pressed
     if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-        create_vertex(global_state, cursor_pos, 1);
+        bool found = false;
+        for (int i = 0; i < global_state->num_circles; i++) {
+            v2f p = sub_v2f(global_state->circles[i].pos, cursor_pos);
+            double r = 1.0f;
+            if (p.x * p.x + p.y * p.y <= r * r) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            create_vertex(global_state, cursor_pos, 1);
+        }
     }
 
     // delete vertex when D is pressed

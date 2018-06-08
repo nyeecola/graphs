@@ -36,3 +36,6 @@ tags
 *.swp
 *.un
 *~
+
+# zip
+*.zip
