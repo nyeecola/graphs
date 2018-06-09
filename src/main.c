@@ -241,9 +241,9 @@ void BFS(global_state_t *global_state, int root_index) {
     circles[root_index].filled = 1;
     circles[root_index].fill_entrance_index[circles[root_index].num_fill_entrances++] = root_index;
     global_state->current_animation_root = root_index;
-    int visited[MAX_VERTICES] = {0};
+    int *visited = calloc(MAX_VERTICES, sizeof(*visited));
 
-    int queue[MAX_VERTICES];
+    int *queue = calloc(MAX_VERTICES, sizeof(*queue));
     int queue_start = 0;
     int queue_end = 0;
     queue[queue_end++] = root_index;
