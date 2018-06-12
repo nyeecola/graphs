@@ -365,6 +365,16 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
         export(global_state, "output.txt");
     }
 
+    // randomize all weights when R is pressed
+    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        for (int i = 0; i < global_state->num_circles; i++) {
+            global_state->circles[i].weight = rand() % (WEIGHT_RANDOM_LIMIT + 1);
+            for (int j = 0; j < global_state->circles[i].num_children; j++) {
+                global_state->circles[i].children[j].weight = rand() % (WEIGHT_RANDOM_LIMIT + 1);
+            }
+        }
+    }
+
     // make graph complete when C is pressed
     if (key == GLFW_KEY_C && action == GLFW_PRESS) {
         for (int i = 0; i < global_state->num_circles; i++) {
@@ -1027,9 +1037,9 @@ int main(int argc, char **argv) {
             float background[6 * 3] = {
                 DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 350, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 350, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 350, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
+                DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
+                DEFAULT_SCREEN_WIDTH - 5, - 370, 0.5,
                 DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO4);
@@ -1057,6 +1067,9 @@ int main(int argc, char **argv) {
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  C               Completa o grafo com arestas de valor 1", 0, 0, 0);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  R               Randomiza todos os pesos do grafo", 0, 0, 0);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0);
