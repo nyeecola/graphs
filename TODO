@@ -1,5 +1,4 @@
 High priority:
-- Fix bug from issue #9
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
 -- Add some kind of edge flood animation
 -- Add forward and back buttons

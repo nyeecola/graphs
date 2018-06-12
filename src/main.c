@@ -552,7 +552,7 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
                             }
                         }
 
-                        if (!is_child_already) {
+                        if (!is_child_already && vertex != i) {
                             int cur_num_children = global_state->circles[vertex].num_children;
                             global_state->circles[vertex].children[cur_num_children].dest = i;
                             global_state->circles[vertex].children[cur_num_children].weight = 1;
