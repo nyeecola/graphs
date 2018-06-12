@@ -1,10 +1,14 @@
 High priority:
+- Fix bug from issue #9
 - Clean up flood animation system (both in terms of segregating better animation state and finishing it up)
--- Add some kind of arrow animation
+-- Add some kind of edge flood animation
 -- Add forward and back buttons
 - Finish and clean up font system
 
 Regular priority:
+- Load graph from file
+- Add delete-all-vertices button
+- Show some error when the vertices limit or entrances limits are reached (instead of just crashing)
 - Create some tool to organize TODOs, DEBUGs and NOTEs
 - Automatize build process, add grep for TODOs && DEBUGs
 - Create documentation

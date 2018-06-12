@@ -192,7 +192,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
             //printf("%f %f %f %f %f\n", q.x0, q.y0, q.x1, q.y1, baked_char.yoff);
             if (*text == 'e' || *text == 'a' || *text == 'd' || *text == 'o' || *text == 'u' || *text == 's'
                     || *text == 'c' || *text == 't' || *text == '/' || *text == 'C' || *text == 'S'
-                    || *text == 'O' || *text == 'U') {
+                    || *text == 'O' || *text == 'U' || *text == '3') {
                 baked_char.yoff += 1.0f;
             }
             if (*text == 'g' || *text == 'p' || *text == 'q') {
