@@ -614,7 +614,12 @@ void scroll_callback(GLFWwindow *window, double x, double y) {
 }
 
 // TODO: optimize this, its performance is terrible right now
-void draw_arrow(int VBO, global_state_t *global_state, v2f v1, v2f v2, bool curved) {
+void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_t *global_state, v2f v1,
+               v2f v2, bool curved, int weight_color_r, int weight_color_g, int weight_color_b,
+               int program_arrow, int program_font, stbtt_bakedchar *cdata, int ftex) {
+
+    glUseProgram(program_arrow);
+    glBindVertexArray(VAO);
 
     // draw arrow body
 
@@ -706,6 +711,40 @@ void draw_arrow(int VBO, global_state_t *global_state, v2f v1, v2f v2, bool curv
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
         glEnableVertexAttribArray(0);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+
+    glBindVertexArray(0);
+
+    // draw edge weight
+
+    if (edge) {
+        v2f edge_weight_pos;
+
+        v1.x = (v1.x * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+        v1.y = (-v1.y * ASPECT_RATIO * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+        v2.x = (v2.x * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+        v2.y = (-v2.y * ASPECT_RATIO * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+        v2f temp_v = scale_v2f(sub_v2f(v2, v1), 0.5f);
+        v2f v3 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
+
+        if (curved) {
+            edge_weight_pos.x = (middle_point_on_curve.x * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
+            edge_weight_pos.y = (-middle_point_on_curve.y * ASPECT_RATIO * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
+            //v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
+            edge_weight_pos = add_v2f(edge_weight_pos, scale_v2f(v3, -1));
+        } else {
+            v2f v4 = add_v2f(v1, temp_v);
+            edge_weight_pos = add_v2f(v3, v4);
+        }
+
+        edge->weight_pos_screen = edge_weight_pos;
+
+        char w[10];
+        sprintf(w, "%d", edge->weight);
+
+        font_render_text_horrible(program_font, VBO3, VAO3, cdata,
+                                  ftex, edge_weight_pos.x, edge_weight_pos.y, w,
+                                  weight_color_r, weight_color_g, weight_color_b, true);
     }
 }
 
@@ -997,7 +1036,8 @@ int main(int argc, char **argv) {
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
                 for (int j = 0; j < global_state.circles[i].num_children; j++) {
-                    int dest = global_state.circles[i].children[j].dest;
+                    edge_t *edge = &global_state.circles[i].children[j];
+                    int dest = edge->dest;
                     glUseProgram(shader_program);
                     glBindVertexArray(VAO2);
                     glUniform3f(translation_uniform, 0, 0, 0);
@@ -1020,13 +1060,12 @@ int main(int argc, char **argv) {
                             break;
                         }
                     }
-                    if (straight) {
-                        draw_arrow(VBO2, &global_state, v1, v2, false);
-                    } else {
-                        draw_arrow(VBO2, &global_state, v1, v2, true);
-                    }
                     glBindVertexArray(0);
 
+                    draw_edge(edge, VBO2, VAO2, VBO3, VAO3, &global_state, v1, v2,
+                              !straight, 0, 0, 0, shader_program, font_shader_program, cdata, ftex);
+
+#if 0
                     // draw edge weight
                     {
                         v1.x = (v1.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
@@ -1051,6 +1090,7 @@ int main(int argc, char **argv) {
                                                       ftex, v3.x, v3.y, w, 0, 0, 0, true);
                         }
                     }
+#endif
                 }
             }
 
@@ -1066,7 +1106,8 @@ int main(int argc, char **argv) {
             if (global_state.modifying_vertex != -1) {
                 v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
                 v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
-                draw_arrow(VBO2, &global_state, v1, v2, false);
+                draw_edge(NULL, VBO2, VAO2, VBO3, VAO3, &global_state, v1, v2, false, 0, 0, 0,
+                          shader_program, font_shader_program, cdata, ftex);
             }
             glBindVertexArray(0);
         }
