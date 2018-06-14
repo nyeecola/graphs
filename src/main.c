@@ -168,7 +168,20 @@ GLuint initialize_shader(char *vertex_file_name, char *frag_file_name) {
     return shader_program;
 }
 
-void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text, float r, float g, float b) {
+void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stbtt_bakedchar *cdata, int ftex, float x, float y, char *text, float r, float g, float b, bool centered) {
+    if (centered) {
+        char *aux = text;
+        float x_off = 0, y_off = 0;
+        while (*aux) {
+            stbtt_bakedchar baked_char = cdata[*aux - 32];
+            x_off += baked_char.xadvance;
+            y_off = min(y_off, baked_char.yoff);
+            aux++;
+        }
+        x -= x_off / 2;
+        y -= y_off / 2;
+    }
+
     x -= DEFAULT_SCREEN_WIDTH / 2;
     y = DEFAULT_SCREEN_HEIGHT / 2 - y;
 
@@ -192,7 +205,7 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
             //printf("%f %f %f %f %f\n", q.x0, q.y0, q.x1, q.y1, baked_char.yoff);
             if (*text == 'e' || *text == 'a' || *text == 'd' || *text == 'o' || *text == 'u' || *text == 's'
                     || *text == 'c' || *text == 't' || *text == '/' || *text == 'C' || *text == 'S'
-                    || *text == 'O' || *text == 'U' || *text == '3') {
+                    || *text == 'O' || *text == 'U' || *text == '3' || *text == '5') {
                 baked_char.yoff += 1.0f;
             }
             if (*text == 'g' || *text == 'p' || *text == 'q') {
@@ -600,54 +613,99 @@ void scroll_callback(GLFWwindow *window, double x, double y) {
     global_state->zoom = max(global_state->zoom, 0.04);
 }
 
-void draw_arrow(int VBO, global_state_t *global_state, v2f v1, v2f v2, bool circle) {
-    // draw arrow body
-    GLfloat line_vertices[3 * 2] = {
-        v1.x, v1.y, 0.2,
-        v2.x, v2.y, 0.2,
-    };
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-    glEnableVertexAttribArray(0);
-    glDrawArrays(GL_LINES, 0, 2);
+// TODO: optimize this, its performance is terrible right now
+void draw_arrow(int VBO, global_state_t *global_state, v2f v1, v2f v2, bool curved) {
 
-    // draw arrow head
-    double r = 1.0f;
-    double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
-    if (magv2v1 > 0.001f) {
-        v2f v2v1 = normalize_v2f(sub_v2f(v1, v2));
-        v2f p1;
-        if (circle) {
-            p1 = scale_v2f(v2v1, r);
-        } else {
-            p1 = scale_v2f(v2v1, 0.01f);
-        }
-        double magv1p1 = magnitude_v2f(sub_v2f(add_v2f(p1, v2), v1));
-        if (magv1p1 >= r || !circle) {
-            v2f temp;
-            if (circle) {
-                temp = scale_v2f(v2v1, 1 + ARROW_HEAD_CONSTANT / global_state->zoom);
-            } else {
-                temp = scale_v2f(v2v1, ARROW_HEAD_CONSTANT / global_state->zoom);
-            }
-            v2f temp2 = sub_v2f(p1, temp);
-            v2f p2 = add_v2f(temp, scale_v2f(create_v2f(-temp2.y, temp2.x), 0.5));
-            v2f p3 = add_v2f(temp, scale_v2f(create_v2f(temp2.y, -temp2.x), 0.5));
-            p1 = add_v2f(v2, p1);
-            p2 = add_v2f(v2, p2);
-            p3 = add_v2f(v2, p3);
-            GLfloat arrow_vertices[3 * 3] = {
-                p2.x, p2.y, 0.2,
-                p1.x, p1.y, 0.2,
-                p3.x, p3.y, 0.2,
+    // draw arrow body
+
+    v2f middle_point_on_curve;
+    if (curved) {
+        // calculates the middle point used for bezier
+        v2f half_v1v2_origin = scale_v2f(sub_v2f(v2, v1), 0.5f);
+        v2f middle_point = add_v2f(v1, half_v1v2_origin);
+        v2f ortho_half_v1v2_origin = create_v2f(-half_v1v2_origin.y, half_v1v2_origin.x);
+        ortho_half_v1v2_origin = normalize_v2f(ortho_half_v1v2_origin);
+        ortho_half_v1v2_origin = scale_v2f(ortho_half_v1v2_origin, 2.2f);
+        middle_point = add_v2f(middle_point, ortho_half_v1v2_origin);
+
+        // iterate over bezier curve
+        v2f last_T = v1;
+        for (int i = 1; i <= 20; i++) {
+            float t = i / 20.0f;
+            v2f aux1 = scale_v2f(v1, (1 - t) * (1 - t));
+            v2f aux2 = scale_v2f(middle_point, 2 * (1 - t) * t);
+            v2f aux3 = scale_v2f(v2, t * t);
+            v2f T = add_v2f(add_v2f(aux1, aux2), aux3);
+
+            GLfloat line_vertices[3 * 2] = {
+                last_T.x, last_T.y, 0.2,
+                T.x, T.y, 0.2,
             };
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
             glEnableVertexAttribArray(0);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glDrawArrays(GL_LINES, 0, 2);
+
+            last_T = T;
         }
+
+        float t = 0.5f;
+        v2f aux1 = scale_v2f(v1, (1 - t) * (1 - t));
+        v2f aux2 = scale_v2f(middle_point, 2 * (1 - t) * t);
+        v2f aux3 = scale_v2f(v2, t * t);
+        middle_point_on_curve = add_v2f(add_v2f(aux1, aux2), aux3);
+    } else {
+        GLfloat line_vertices[3 * 2] = {
+            v1.x, v1.y, 0.2,
+            v2.x, v2.y, 0.2,
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_LINES, 0, 2);
+    }
+
+    // draw arrow head
+
+    double magv2v1 = magnitude_v2f(sub_v2f(v1, v2));
+    if (magv2v1 > 0.001f) {
+        v2f v2v1 = sub_v2f(v1, v2);
+        v2f middle_v2v1 = scale_v2f(v2v1, 0.5f);
+
+        v2f normalized_v2v1 = normalize_v2f(v2v1);
+        v2f arrow_head_vector = scale_v2f(normalized_v2v1, ARROW_HEAD_CONSTANT / global_state->zoom);
+
+        if (!curved) {
+            middle_point_on_curve = add_v2f(v2, middle_v2v1);
+        }
+
+        v2f p1, p2, p3;
+        p1 = add_v2f(middle_point_on_curve, scale_v2f(arrow_head_vector, -0.5));
+        
+        p2 = add_v2f(middle_point_on_curve,
+                     scale_v2f(create_v2f(-arrow_head_vector.y,
+                                          arrow_head_vector.x),
+                               0.5));
+        p2 = add_v2f(p2, scale_v2f(arrow_head_vector, 0.5));
+
+        p3 = add_v2f(middle_point_on_curve,
+                     scale_v2f(create_v2f(arrow_head_vector.y,
+                                          -arrow_head_vector.x),
+                               0.5));
+        p3 = add_v2f(p3, scale_v2f(arrow_head_vector, 0.5));
+
+        GLfloat arrow_vertices[3 * 3] = {
+            p2.x, p2.y, 0.2,
+            p1.x, p1.y, 0.2,
+            p3.x, p3.y, 0.2,
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 }
 
@@ -705,7 +763,7 @@ int main(int argc, char **argv) {
     //glDepthFunc(GL_LESS);
 
     // line width
-    glLineWidth(3);
+    glLineWidth(LINE_WIDTH);
 
 #if 1
     // debug
@@ -816,7 +874,6 @@ int main(int argc, char **argv) {
         stbtt_BakeFontBitmap(ttf_buffer, 0, FONT_SIZE, temp_bitmap, 512, 512, 32, 96, cdata);
         free(ttf_buffer);
         glBindTexture(GL_TEXTURE_2D, ftex);
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, 512, 512, 0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glGenerateMipmap(GL_TEXTURE_2D);
@@ -841,7 +898,7 @@ int main(int argc, char **argv) {
             global_state.cur_translation = scale_v2f(sub_v2f(now, last), -1);
         }
         // TODO; make sure this works if currently also dragging map (does it need to?)
-        // TODO: make it possible to drag multiple vertices simultaneously
+        // TODO: make it possible to select and drag multiple vertices simultaneously
         if (global_state.dragging_vertex) {
             v2f temp = get_cursor_world_space(window, global_state.last_translation, global_state.zoom);
             for (int i = 0; i < global_state.num_circles; i++) {
@@ -911,8 +968,6 @@ int main(int argc, char **argv) {
                     glUniform3f(color_uniform, VERTEX_FILLED_COLOR);
                 } else if (circles[i].selected) { // TODO: maybe remove/rethink this whole selected concept
                     glUniform3f(color_uniform, VERTEX_SELECTED_COLOR);
-                //} else if (global_state.editing_circle == i) {
-                //    glUniform3f(color_uniform, WEIGHT_EDITING_COLOR);
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
@@ -925,24 +980,13 @@ int main(int argc, char **argv) {
                     v.y = (-v.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
                     char str[10];
                     sprintf(str, "%d", circles[i].weight);
-                    char *aux = str;
-                    float x_off = 0, y_off = 0;
-                    while (*aux) {
-                        stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
-                        x_off += baked_char.xadvance;
-                        y_off = min(y_off, baked_char.yoff);
-                        //y_off = max(y_off, baked_char.yoff);
-                        aux++;
-                    }
-                    v.x -= x_off / 2;
-                    v.y -= y_off / 2;
 
                     if (global_state.editing_circle == i) {
                         font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                  ftex, v.x, v.y, str, WEIGHT_EDITING_COLOR);
+                                                  ftex, v.x, v.y, str, WEIGHT_EDITING_COLOR, true);
                     } else {
                         font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                  ftex, v.x, v.y, str, 0, 0, 0);
+                                                  ftex, v.x, v.y, str, 0, 0, 0, true);
                     }
                 }
             }
@@ -953,6 +997,7 @@ int main(int argc, char **argv) {
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
                 for (int j = 0; j < global_state.circles[i].num_children; j++) {
+                    int dest = global_state.circles[i].children[j].dest;
                     glUseProgram(shader_program);
                     glBindVertexArray(VAO2);
                     glUniform3f(translation_uniform, 0, 0, 0);
@@ -966,8 +1011,20 @@ int main(int argc, char **argv) {
                         glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
                     }
                     v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
-                    v2f v2 = add_v2f(frame_translation, global_state.circles[global_state.circles[i].children[j].dest].pos);
-                    draw_arrow(VBO2, &global_state, v1, v2, true);
+                    v2f v2 = add_v2f(frame_translation, global_state.circles[dest].pos);
+                    // TODO: optimize this by ordering children by index and using binary search when needed (all over the program)
+                    bool straight = true;
+                    for (int k = 0; k < global_state.circles[dest].num_children; k++) {
+                        if (global_state.circles[dest].children[k].dest == i) {
+                            straight = false;
+                            break;
+                        }
+                    }
+                    if (straight) {
+                        draw_arrow(VBO2, &global_state, v1, v2, false);
+                    } else {
+                        draw_arrow(VBO2, &global_state, v1, v2, true);
+                    }
                     glBindVertexArray(0);
 
                     // draw edge weight
@@ -980,27 +1037,18 @@ int main(int argc, char **argv) {
                         v2f v3 = add_v2f(v1, temp_v);
                         v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
                         v3 = add_v2f(v3, v4);
+
+                        global_state.circles[i].children[j].weight_pos_screen = v3;
+
                         char w[10];
                         sprintf(w, "%d", global_state.circles[i].children[j].weight);
-                        char *aux = w;
-                        float x_off = 0, y_off = 0;
-                        while (*aux) {
-                            stbtt_bakedchar baked_char = cdata[*aux - 32]; // TODO: remove this magic number
-                            x_off += baked_char.xadvance;
-                            y_off = min(y_off, baked_char.yoff);
-                            //y_off = max(y_off, baked_char.yoff);
-                            aux++;
-                        }
-                        v3.x -= x_off / 2;
-                        v3.y -= y_off / 2;
-                        global_state.circles[i].children[j].weight_pos_screen = v3;
 
                         if (global_state.editing_edge == &global_state.circles[i].children[j]) {
                             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                      ftex, v3.x, v3.y, w, WEIGHT_EDITING_COLOR);
+                                                      ftex, v3.x, v3.y, w, WEIGHT_EDITING_COLOR, true);
                         } else {
                             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                      ftex, v3.x, v3.y, w, 0, 0, 0);
+                                                      ftex, v3.x, v3.y, w, 0, 0, 0, true);
                         }
                     }
                 }
@@ -1055,42 +1103,44 @@ int main(int argc, char **argv) {
             int line_count = 0;
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "      Comandos:", 0, 0, 0);
+                                      "      Comandos:", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                      ftex, pos.x, pos.y + line_height * (line_count++), "", 0, 0, 0);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                      ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  A               Adiciona um vertice", 0, 0, 0);
+                                      ftex, pos.x, pos.y + line_height * (line_count++), "", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  D               Deleta um vertice", 0, 0, 0);
+                                      "  A               Adiciona um vertice", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  C               Completa o grafo com arestas de valor 1", 0, 0, 0);
+                                      "  D               Deleta um vertice", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  R               Randomiza todos os pesos do grafo", 0, 0, 0);
+                                      "  C               Completa o grafo com arestas de valor 1",
+                                      0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0);
+                                      "  R               Randomiza todos os pesos do grafo", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  X               Altera o peso de um vertice/aresta", 0, 0, 0);
+                                      "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  B               Executa um BFS comecando no vertice do cursor", 0, 0, 0);
+                                      "  X               Altera o peso de um vertice/aresta", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  SCROLL   Zoom", 0, 0, 0);
+                                      "  B               Executa um BFS comecando no vertice do cursor",
+                                      0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  MOUSE2  Arrastar a tela", 0, 0, 0);
+                                      "  SCROLL   Zoom", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  E               Exportar para arquivo", 0, 0, 0);
+                                      "  MOUSE2  Arrastar a tela", 0, 0, 0, false);
             font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
-                                      "  TAB          Esconde esse menu", 0, 0, 0);
+                                      "  E               Exportar para arquivo", 0, 0, 0, false);
+            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                                      ftex, pos.x, pos.y + line_height * (line_count++),
+                                      "  TAB          Esconde esse menu", 0, 0, 0, false);
         }
 
         glfwSwapBuffers(window);

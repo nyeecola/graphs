@@ -5,11 +5,11 @@ High priority:
 - Finish and clean up font system
 
 Regular priority:
+- Optimize a lot
 - Load graph from file
 - Add delete-all-vertices button
 - Show some error when the vertices limit or entrances limits are reached (instead of just crashing)
-- Create some tool to organize TODOs, DEBUGs and NOTEs
-- Automatize build process, add grep for TODOs && DEBUGs
+- Automatize build process, add grep for TODOs, DEBUGs and NOTEs
 - Create documentation
 - Make it so that multiple vertices can be dragged at the same time 
 - Make it so that multiple vertices can be modified at the same time 
@@ -18,9 +18,11 @@ Regular priority:
 - Create DFS
 - Add vertex position animations (bipartido, flux)
 - Fix shader error log not working properly
+- Non-oriented graphs
+- Non-pondered graphs
+- Make randomizer range selectable
 
 Low priority:
 - Recheck constants
 - Remove MAX_VERTICES limit
 - Render using instancing
-- Add online mode
