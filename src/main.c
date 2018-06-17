@@ -68,6 +68,13 @@ typedef struct {
     bool showing_menu;
 
     int current_animation_root; // index of the current animation root vertex
+
+    GLuint default_vao;
+    GLuint edge_vao;
+    GLuint edge_vbo;
+    GLuint font_vao;
+    GLuint font_vbo; // we should probably cache this
+    GLuint menu_vao;
 } global_state_t;
 
 // kills game with an error message
@@ -186,7 +193,6 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
     y = DEFAULT_SCREEN_HEIGHT / 2 - y;
 
     // TODO: clean all of this up
-    glBindVertexArray(vao);
     // assuming orthographic projection with units = screen pixels, origin at top left
     glEnable(GL_TEXTURE_2D);
     glUseProgram(font_shader_program);
@@ -224,18 +230,17 @@ void font_render_text_horrible(GLuint font_shader_program, int vbo, int vao, stb
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, ftex);
 
+            glBindVertexArray(vao);
             glBindBuffer(GL_ARRAY_BUFFER, vbo);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), buffer, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) 0);
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) (3 * sizeof(GLfloat)));
-            glEnableVertexAttribArray(1);
-
+            // NOTE: OpenGL hack (Buffer Object Streaming) to improve performance
+            glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), NULL, GL_STREAM_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(buffer), buffer, GL_STREAM_DRAW);
             glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            glBindVertexArray(0);
         }
         text++;
     }
-    glBindVertexArray(0);
 }
 
 void clear_flood(global_state_t *global_state) {
@@ -295,6 +300,8 @@ void BFS(global_state_t *global_state, int root_index) {
 #endif
         }
     }
+    free(visited);
+    free(queue);
 }
 
 v2f get_untranslated_world_space(GLFWwindow *window, double zoom, v2f v) {
@@ -619,8 +626,6 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
                int program_arrow, int program_font, stbtt_bakedchar *cdata, int ftex) {
 
     glUseProgram(program_arrow);
-    glBindVertexArray(VAO);
-
     // draw arrow body
 
     v2f middle_point_on_curve;
@@ -646,11 +651,13 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
                 last_T.x, last_T.y, 0.2,
                 T.x, T.y, 0.2,
             };
+            glBindVertexArray(VAO);
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            // NOTE: OpenGL hack (Buffer Object Streaming) to improve performance
+            glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), NULL, GL_STREAM_DRAW);
             glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-            glEnableVertexAttribArray(0);
             glDrawArrays(GL_LINES, 0, 2);
+            glBindVertexArray(0);
 
             last_T = T;
         }
@@ -665,11 +672,13 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
             v1.x, v1.y, 0.2,
             v2.x, v2.y, 0.2,
         };
+        glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-        glEnableVertexAttribArray(0);
+        // NOTE: OpenGL hack (Buffer Object Streaming) to improve performance
+        glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), NULL, GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_STREAM_DRAW);
         glDrawArrays(GL_LINES, 0, 2);
+        glBindVertexArray(0);
     }
 
     // draw arrow head
@@ -706,14 +715,14 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
             p1.x, p1.y, 0.2,
             p3.x, p3.y, 0.2,
         };
+        glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-        glEnableVertexAttribArray(0);
+        // NOTE: OpenGL hack (Buffer Object Streaming) to improve performance
+        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), NULL, GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(arrow_vertices), arrow_vertices, GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
     }
-
-    glBindVertexArray(0);
 
     // draw edge weight
 
@@ -730,7 +739,6 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
         if (curved) {
             edge_weight_pos.x = (middle_point_on_curve.x * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
             edge_weight_pos.y = (-middle_point_on_curve.y * ASPECT_RATIO * global_state->zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
-            //v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
             edge_weight_pos = add_v2f(edge_weight_pos, scale_v2f(v3, -1));
         } else {
             v2f v4 = add_v2f(v1, temp_v);
@@ -742,7 +750,7 @@ void draw_edge(edge_t *edge, int VBO, int VAO, int VBO3, int VAO3, global_state_
         char w[10];
         sprintf(w, "%d", edge->weight);
 
-        font_render_text_horrible(program_font, VBO3, VAO3, cdata,
+        font_render_text_horrible(program_font, global_state->font_vbo, global_state->font_vao, cdata,
                                   ftex, edge_weight_pos.x, edge_weight_pos.y, w,
                                   weight_color_r, weight_color_g, weight_color_b, true);
     }
@@ -823,59 +831,8 @@ int main(int argc, char **argv) {
     GLuint shader_program = initialize_shader("vertexshader.glsl", "fragshader.glsl");
     GLuint font_shader_program = initialize_shader("font_vertexshader.glsl", "font_fragshader.glsl");
 
-    // buffers initialization
-
-    // vertices buffers
-    GLuint VBO, VAO;
-    glGenBuffers(1, &VBO);
-    glGenVertexArrays(1, &VAO);
-
-    // line buffers
-    GLuint VBO2, VAO2;
-    glGenBuffers(1, &VBO2);
-    glGenVertexArrays(1, &VAO2);
-
-    // font buffers
-    GLuint VBO3, VAO3;
-    glGenBuffers(1, &VBO3);
-    glGenVertexArrays(1, &VAO3);
-
-    // menu background buffers
-    GLuint VBO4, VAO4;
-    glGenBuffers(1, &VBO4);
-    glGenVertexArrays(1, &VAO4);
-    
-    // initialize program data
-
-    GLfloat circle_vertices[NUM_SECTIONS_CIRCLE * 3] = {0};
-    for (int i = 0; i < NUM_SECTIONS_CIRCLE; i++) {
-        float angle = i * (2 * M_PI / NUM_SECTIONS_CIRCLE);
-        circle_vertices[i * 3] = cos(angle);
-        circle_vertices[i * 3 + 1] = sin(angle);
-        circle_vertices[i * 3 + 2] = 0.0f;
-    }
-
-    // TODO: check for error
-    // TODO: really understand all of this better (this VAO thing)
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-    glEnableVertexAttribArray(0);
-    //glBindVertexArray(0); // TODO: uncomment this
-
-    GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
-    GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
-    GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
-    GLint color_uniform = glGetUniformLocation(shader_program, "color");
-    GLint filled_uniform = glGetUniformLocation(shader_program, "filled");
-    GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
-    GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
-    GLint num_entrances_uniform = glGetUniformLocation(shader_program, "num_entrances");
-    GLint font_tex_uniform = glGetUniformLocation(font_shader_program, "tex");
-
-
     // initialize global state
+
     global_state_t global_state;
     global_state.zoom = 0.1f;
     global_state.delta_time = 0;
@@ -902,6 +859,94 @@ int main(int argc, char **argv) {
     glfwSetWindowUserPointer(window, (void *) &global_state);
 
 
+    // buffers initialization
+
+    // vertices buffers
+    {
+        GLuint VBO;
+        glGenBuffers(1, &VBO);
+        glGenVertexArrays(1, &global_state.default_vao);
+
+        GLfloat circle_vertices[NUM_SECTIONS_CIRCLE * 3] = {0};
+        for (int i = 0; i < NUM_SECTIONS_CIRCLE; i++) {
+            float angle = i * (2 * M_PI / NUM_SECTIONS_CIRCLE);
+            circle_vertices[i * 3] = cos(angle);
+            circle_vertices[i * 3 + 1] = sin(angle);
+            circle_vertices[i * 3 + 2] = 0.0f;
+        }
+
+        // TODO: check for error
+        glBindVertexArray(global_state.default_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(circle_vertices), circle_vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(0);
+    }
+
+    // edge buffers
+    {
+        glGenBuffers(1, &global_state.edge_vbo);
+        glGenVertexArrays(1, &global_state.edge_vao);
+
+        glBindVertexArray(global_state.edge_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, global_state.edge_vbo);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(0);
+    }
+
+    // font buffers
+    {
+        glGenBuffers(1, &global_state.font_vbo);
+        glGenVertexArrays(1, &global_state.font_vao);
+
+        glBindVertexArray(global_state.font_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, global_state.font_vbo);
+        // NOTE: currently we are uploading data to the font_vbo every frame
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *) (3 * sizeof(GLfloat)));
+        glEnableVertexAttribArray(1);
+        glBindVertexArray(0);
+    }
+
+    // menu background buffers
+    {
+        GLuint VBO;
+        glGenBuffers(1, &VBO);
+        glGenVertexArrays(1, &global_state.menu_vao);
+
+        float background[6 * 3] = {
+            DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
+            DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
+            DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
+            DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
+            DEFAULT_SCREEN_WIDTH - 5, - 370, 0.5,
+            DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
+        };
+
+        glBindVertexArray(global_state.menu_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(background), background, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(0);
+    }
+    
+    // initialize program data
+
+    GLint scale_uniform = glGetUniformLocation(shader_program, "scale");
+    GLint aspect_ratio_uniform = glGetUniformLocation(shader_program, "aspect_ratio");
+    GLint translation_uniform = glGetUniformLocation(shader_program, "translation");
+    GLint color_uniform = glGetUniformLocation(shader_program, "color");
+    GLint filled_uniform = glGetUniformLocation(shader_program, "filled");
+    GLint fill_entrance_uniform = glGetUniformLocation(shader_program, "fill_entrance");
+    GLint fill_radius_uniform = glGetUniformLocation(shader_program, "fill_radius");
+    GLint num_entrances_uniform = glGetUniformLocation(shader_program, "num_entrances");
+    GLint font_tex_uniform = glGetUniformLocation(font_shader_program, "tex");
+
+
     // initialize font data
     stbtt_bakedchar cdata[96]; // ASCII alphanumeric range
     GLuint ftex;
@@ -909,13 +954,15 @@ int main(int argc, char **argv) {
     {
         unsigned char *ttf_buffer = malloc((1<<20) * sizeof(*ttf_buffer));
         unsigned char temp_bitmap[512*521];
-        fread(ttf_buffer, 1, 1<<20, fopen("arial.ttf", "rb"));
+        FILE *f = fopen("arial.ttf", "rb");
+        fread(ttf_buffer, 1, 1<<20, f);
         stbtt_BakeFontBitmap(ttf_buffer, 0, FONT_SIZE, temp_bitmap, 512, 512, 32, 96, cdata);
-        free(ttf_buffer);
         glBindTexture(GL_TEXTURE_2D, ftex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glGenerateMipmap(GL_TEXTURE_2D);
+        free(ttf_buffer);
+        fclose(f);
     }
 
     double last_time = glfwGetTime();
@@ -967,7 +1014,6 @@ int main(int argc, char **argv) {
 
             for (int i = 0; i < global_state.num_circles; i++) {
                 glUseProgram(shader_program);
-                glBindVertexArray(VAO);
                 v2f v = add_v2f(frame_translation, circles[i].pos);
                 glUniform3f(translation_uniform, v.x, v.y, 0.0f);
                 glUniform1i(filled_uniform, circles[i].filled);
@@ -1010,6 +1056,7 @@ int main(int argc, char **argv) {
                 } else {
                     glUniform3f(color_uniform, VERTEX_DEFAULT_COLOR);
                 }
+                glBindVertexArray(global_state.default_vao);
                 glDrawArrays(GL_TRIANGLE_FAN, 0, NUM_SECTIONS_CIRCLE);
                 glBindVertexArray(0);
 
@@ -1021,10 +1068,10 @@ int main(int argc, char **argv) {
                     sprintf(str, "%d", circles[i].weight);
 
                     if (global_state.editing_circle == i) {
-                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                        font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                                   ftex, v.x, v.y, str, WEIGHT_EDITING_COLOR, true);
                     } else {
-                        font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+                        font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                                   ftex, v.x, v.y, str, 0, 0, 0, true);
                     }
                 }
@@ -1033,13 +1080,15 @@ int main(int argc, char **argv) {
 
         // draw edges
         {
+            // TODO: clean up all of this, this should all probably be inside the draw_edge call
+
             // vertices children
             for (int i = 0; i < global_state.num_circles; i++) {
                 for (int j = 0; j < global_state.circles[i].num_children; j++) {
                     edge_t *edge = &global_state.circles[i].children[j];
                     int dest = edge->dest;
+
                     glUseProgram(shader_program);
-                    glBindVertexArray(VAO2);
                     glUniform3f(translation_uniform, 0, 0, 0);
                     glUniform1i(filled_uniform, 0);
                     glUniform2f(fill_entrance_uniform, 0, 0);
@@ -1050,8 +1099,10 @@ int main(int argc, char **argv) {
                     } else {
                         glUniform3f(color_uniform, ARROW_DEFAULT_COLOR);
                     }
+
                     v2f v1 = add_v2f(frame_translation, global_state.circles[i].pos);
                     v2f v2 = add_v2f(frame_translation, global_state.circles[dest].pos);
+
                     // TODO: optimize this by ordering children by index and using binary search when needed (all over the program)
                     bool straight = true;
                     for (int k = 0; k < global_state.circles[dest].num_children; k++) {
@@ -1060,42 +1111,13 @@ int main(int argc, char **argv) {
                             break;
                         }
                     }
-                    glBindVertexArray(0);
 
-                    draw_edge(edge, VBO2, VAO2, VBO3, VAO3, &global_state, v1, v2,
-                              !straight, 0, 0, 0, shader_program, font_shader_program, cdata, ftex);
-
-#if 0
-                    // draw edge weight
-                    {
-                        v1.x = (v1.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
-                        v1.y = (-v1.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
-                        v2.x = (v2.x * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_WIDTH / 2);
-                        v2.y = (-v2.y * ASPECT_RATIO * global_state.zoom + 1.0f) * (DEFAULT_SCREEN_HEIGHT / 2);
-                        v2f temp_v = scale_v2f(sub_v2f(v2, v1), 0.5f);
-                        v2f v3 = add_v2f(v1, temp_v);
-                        v2f v4 = scale_v2f(normalize_v2f(create_v2f(-temp_v.y, temp_v.x)), FONT_SIZE*1.1f);
-                        v3 = add_v2f(v3, v4);
-
-                        global_state.circles[i].children[j].weight_pos_screen = v3;
-
-                        char w[10];
-                        sprintf(w, "%d", global_state.circles[i].children[j].weight);
-
-                        if (global_state.editing_edge == &global_state.circles[i].children[j]) {
-                            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                      ftex, v3.x, v3.y, w, WEIGHT_EDITING_COLOR, true);
-                        } else {
-                            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
-                                                      ftex, v3.x, v3.y, w, 0, 0, 0, true);
-                        }
-                    }
-#endif
+                    draw_edge(edge, global_state.edge_vbo, global_state.edge_vao, global_state.font_vbo, global_state.font_vao,
+                              &global_state, v1, v2, !straight, 0, 0, 0, shader_program, font_shader_program, cdata, ftex);
                 }
             }
 
             glUseProgram(shader_program);
-            glBindVertexArray(VAO2);
             glUniform3f(translation_uniform, 0, 0, 0);
             // TODO: think about this
             glUniform1i(filled_uniform, 0);
@@ -1106,80 +1128,69 @@ int main(int argc, char **argv) {
             if (global_state.modifying_vertex != -1) {
                 v2f v1 = add_v2f(frame_translation, global_state.circles[global_state.modifying_vertex].pos);
                 v2f v2 = get_cursor_untranslated_world_space(window, global_state.zoom);
-                draw_edge(NULL, VBO2, VAO2, VBO3, VAO3, &global_state, v1, v2, false, 0, 0, 0,
-                          shader_program, font_shader_program, cdata, ftex);
+                draw_edge(NULL, global_state.edge_vbo, global_state.edge_vao, global_state.font_vbo, global_state.font_vao,
+                          &global_state, v1, v2, false, 0, 0, 0, shader_program, font_shader_program, cdata, ftex);
             }
-            glBindVertexArray(0);
         }
 
         // draw help menu
         if (global_state.showing_menu) {
             glDisable(GL_DEPTH_TEST);
             glUseProgram(shader_program);
-            glBindVertexArray(VAO4);
             glUniform3f(translation_uniform, -DEFAULT_SCREEN_WIDTH/2, DEFAULT_SCREEN_HEIGHT/2, 0);
             glUniform1i(filled_uniform, 0);
             glUniform2f(fill_entrance_uniform, 0, 0);
             glUniform1f(fill_radius_uniform, 0);
             glUniform1f(scale_uniform, 1/(DEFAULT_SCREEN_WIDTH/2.0f));
             glUniform3f(color_uniform, 0.7f, 0.7f, 0.7f);
-            float background[6 * 3] = {
-                DEFAULT_SCREEN_WIDTH - 500, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
-                DEFAULT_SCREEN_WIDTH - 500, - 370, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 370, 0.5,
-                DEFAULT_SCREEN_WIDTH - 5, - 70, 0.5,
-            };
-            glBindBuffer(GL_ARRAY_BUFFER, VBO4);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(background), background, GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void *) 0);
-            glEnableVertexAttribArray(0);
+
+            glBindVertexArray(global_state.menu_vao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             glBindVertexArray(0);
+
             glEnable(GL_DEPTH_TEST);
 
             v2f pos = create_v2f(DEFAULT_SCREEN_WIDTH - 500, 100);
             float line_height = FONT_SIZE + 1.0f;
             int line_count = 0;
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "      Comandos:", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++), "", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  A               Adiciona um vertice", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  D               Deleta um vertice", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  C               Completa o grafo com arestas de valor 1",
                                       0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  R               Randomiza todos os pesos do grafo", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  CTRL        Arraste para adicionar uma aresta", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  X               Altera o peso de um vertice/aresta", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  B               Executa um BFS comecando no vertice do cursor",
                                       0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  SCROLL   Zoom", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  MOUSE2  Arrastar a tela", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  E               Exportar para arquivo", 0, 0, 0, false);
-            font_render_text_horrible(font_shader_program, VBO3, VAO3, cdata,
+            font_render_text_horrible(font_shader_program, global_state.font_vbo, global_state.font_vao, cdata,
                                       ftex, pos.x, pos.y + line_height * (line_count++),
                                       "  TAB          Esconde esse menu", 0, 0, 0, false);
         }
